@@ -72,11 +72,16 @@ class LLMManager:
             self.load_model()
         
         context = self.get_context()
-        # Context-as-reference approach for better instruction following
-        formatted_prompt = f"""<|system|>You are the StarZopp Assistant. Provide direct, professional answers. If the user greets you, greet them back naturally.</s>
-<|user|>{prompt}
+        # Prompt optimized for concise paragraph summaries
+        formatted_prompt = f"""<|system|>You are the official StarZopp Expert. 
+- Provide a concise, professional summary in a single short paragraph.
+- Use ONLY the DATABASE below.
+- Do NOT use bullet points unless specifically asked.
+- Combine features and mission into a smooth description.
 
-(Instruction: Use this StarZopp knowledge if relevant: {context})</s>
+DATABASE:
+{context}</s>
+<|user|>{prompt}</s>
 <|assistant|>"""
         
         with self._lock:
@@ -102,11 +107,16 @@ class LLMManager:
             self.load_model()
 
         context = self.get_context()
-        # Context-as-reference approach for better instruction following (stream)
-        formatted_prompt = f"""<|system|>You are the StarZopp Assistant. Provide direct, professional answers. If the user greets you, greet them back naturally.</s>
-<|user|>{prompt}
+        # Prompt optimized for concise paragraph summaries (stream)
+        formatted_prompt = f"""<|system|>You are the official StarZopp Expert. 
+- Provide a concise, professional summary in a single short paragraph.
+- Use ONLY the DATABASE below.
+- Do NOT use bullet points unless specifically asked.
+- Combine features and mission into a smooth description.
 
-(Instruction: Use this StarZopp knowledge if relevant: {context})</s>
+DATABASE:
+{context}</s>
+<|user|>{prompt}</s>
 <|assistant|>"""
 
         with self._lock:
