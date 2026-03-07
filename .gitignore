@@ -16,8 +16,14 @@ env/
 .agent/
 _agents/
 _agent/
+
+# Test and Debug files
 test_*.py
-load_test.py
-verify_starzopp.py
-test_hello.py
-test_real_q.py
+*test.py
+check_*.py
+debug_*.py
+extract_*.py
+verify_*.py
+load.py
+knowledge.txt
+api_requests.log

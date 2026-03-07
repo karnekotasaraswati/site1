@@ -1,5 +1,6 @@
 import os
 import threading
+from datetime import datetime
 from llama_cpp import Llama
 from huggingface_hub import hf_hub_download
 import glob
@@ -66,7 +67,7 @@ class LLMManager:
         # Quick greeting check for 100% accuracy and speed
         clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
         if clean_prompt in ["hello", "hi", "hey", "greetings", "hi there"]:
-            return "Hello! I am your StarZopp assistant. How can I help you today?"
+            return "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?"
 
         if self.model is None:
             self.load_model()
@@ -74,6 +75,7 @@ class LLMManager:
         context = self.get_context()
         # Prompt optimized for concise paragraph summaries
         formatted_prompt = f"""<|system|>You are the official StarZopp Expert. 
+- The current date and year is {datetime.now().strftime("%B %d, %Y")}.
 - Provide a concise, professional summary in a single short paragraph.
 - Use ONLY the DATABASE below.
 - Do NOT use bullet points unless specifically asked.
@@ -100,7 +102,7 @@ DATABASE:
         # Quick greeting check for 100% accuracy and speed (stream)
         clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
         if clean_prompt in ["hello", "hi", "hey", "greetings", "hi there"]:
-            yield "Hello! I am your StarZopp assistant. How can I help you today?"
+            yield "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?"
             return
 
         if self.model is None:
@@ -109,6 +111,7 @@ DATABASE:
         context = self.get_context()
         # Prompt optimized for concise paragraph summaries (stream)
         formatted_prompt = f"""<|system|>You are the official StarZopp Expert. 
+- The current date and year is {datetime.now().strftime("%B %d, %Y")}.
 - Provide a concise, professional summary in a single short paragraph.
 - Use ONLY the DATABASE below.
 - Do NOT use bullet points unless specifically asked.

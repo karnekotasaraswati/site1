@@ -1,41 +1,88 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from typing import Optional
-import os
 import time
+import os
+import logging
+from typing import Optional
 
-from security import get_api_key, validate_master_secret, create_new_key
-from model import llm
-from database import init_db, save_api_key, save_chat
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Request, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from fastapi import Request
+
+from security import get_api_key, validate_master_secret, create_new_key, refresh_key_cache, log_request
+from model import llm
+from database import init_db, save_api_key, save_chat, save_feedback
 
 # Create a limiter that identifies users by their IP or API Key
 limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
-    title="Local LLM API",
-    description="FastAPI project serving TinyLlama locally",
-    version="1.0.0"
+    title="Starzopp AI API",
+    description="Secure Backend for Stazzy - Starzopp AI Assistant",
+    version="1.1.0"
 )
 
+# 🔒 Secure CORS Configuration
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["X-API-Key", "X-API-Secret", "X-Master-Secret", "Content-Type", "Authorization"],
 )
+
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Custom handler for rate limit exceeded to log the event
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    client_ip = get_remote_address(request)
+    log_request(request, 429, f"RateLimitExceeded-IP:{client_ip}")
+    return await _rate_limit_exceeded_handler(request, exc)
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+
+# 📝 Middleware for global request logging
+@app.middleware("http")
+async def request_logger_middleware(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    
+    # We don't want to log health checks or static files too noisily, but for security we can
+    if not request.url.path.startswith(("/static", "/health", "/favicon.ico")):
+        # Note: We can't easily get the API key here without re-parsing headers, 
+        # so we rely on the log_request calls within dependencies for authenticated routes.
+        # But we can log the general request here for unauthenticated ones.
+        pass
+        
+    return response
+
+# Mount the static directory
+static_path = os.path.join(os.path.dirname(__file__), "static")
+if not os.path.exists(static_path):
+    os.makedirs(static_path)
+app.mount("/static", StaticFiles(directory=static_path), name="static")
+
+@app.get("/")
+async def read_index():
+    return FileResponse(os.path.join(static_path, "index.html"))
+
+# --- Pydantic Models for Input Validation ---
+
+class FeedbackRequest(BaseModel):
+    prompt: str
+    response: str
+    feedback_type: str
+    comment: Optional[str] = ""
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -43,13 +90,19 @@ class GenerateRequest(BaseModel):
     temperature: Optional[float] = 0.7
     top_p: Optional[float] = 0.9
 
-class KeyResponse(BaseModel):
+class KeyGenerationResponse(BaseModel):
     api_key: str
+    api_secret: str
+    description: str
     message: str
+
+# --- API Endpoints ---
 
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    # 🚀 Pre-load API keys into memory cache for zero-latency lookups
+    refresh_key_cache()
     print("Loading model...")
     llm.load_model()
 
@@ -61,18 +114,50 @@ async def health_check():
         "model": "TinyLlama-1.1B-Chat-v1.0"
     }
 
-@app.get("/generate-api-key", response_model=KeyResponse)
-async def generate_api_key(master_secret: str = Depends(validate_master_secret)):
-    new_key = create_new_key()
+@app.get("/list-api-keys")
+@limiter.limit("5/minute")
+async def list_api_keys(request: Request, master_secret: str = Depends(validate_master_secret)):
+    from database import get_all_keys_info
+    keys = get_all_keys_info()
+    log_request(request, 200, "MASTER")
+    return keys
 
-    success, error_msg = save_api_key(new_key)
+@app.delete("/revoke-api-key/{key_id}")
+@app.post("/revoke-api-key/{key_id}")
+@limiter.limit("5/minute")
+async def revoke_api_key(request: Request, key_id: int, master_secret: str = Depends(validate_master_secret)):
+    from database import delete_api_key
+    if delete_api_key(key_id):
+        refresh_key_cache()
+        log_request(request, 200, "MASTER-REVOKE")
+        return {"status": "success", "message": f"Key {key_id} revoked"}
+    
+    log_request(request, 500, "MASTER-REVOKE-FAIL")
+    raise HTTPException(status_code=500, detail="Failed to revoke key")
+
+@app.get("/generate-api-key", response_model=KeyGenerationResponse)
+@limiter.limit("5/minute")
+async def generate_api_key(
+    request: Request,
+    description: Optional[str] = "My Key", 
+    master_secret: str = Depends(validate_master_secret)
+):
+    from database import save_api_key
+    new_key = create_new_key(prefix="sk") # sk_... for API Key
+    new_secret = create_new_key(prefix="ss") # ss_... for Secret Key
+
+    success, error_msg = save_api_key(new_key, new_secret, description)
 
     if success:
+        log_request(request, 201, "MASTER-GEN")
         return {
             "api_key": new_key,
-            "message": "Key generated & stored"
+            "api_secret": new_secret,
+            "description": description,
+            "message": "Key pair generated & stored securely"
         }
 
+    log_request(request, 500, "MASTER-GEN-FAIL")
     raise HTTPException(status_code=500, detail=error_msg)
 
 @app.post("/generate")
@@ -85,7 +170,9 @@ async def generate_response(
 ):
     try:
         start_time = time.time()
-        response = llm.generate(
+        # 🚀 Move model execution to a separate thread to keep the main event loop responsive
+        response = await run_in_threadpool(
+            llm.generate,
             generate_request.prompt, 
             generate_request.max_tokens,
             temperature=generate_request.temperature,
@@ -94,7 +181,9 @@ async def generate_response(
         duration = time.time() - start_time
         
         # Save to database in background
-        background_tasks.add_task(save_chat, request.prompt, response)
+        background_tasks.add_task(save_chat, generate_request.prompt, response)
+        
+        log_request(request, 200, api_key)
         
         return {
             "response": response,
@@ -104,6 +193,7 @@ async def generate_response(
             }
         }
     except Exception as e:
+        log_request(request, 500, api_key)
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate-stream")
@@ -115,6 +205,8 @@ async def generate_stream(
     api_key: str = Depends(get_api_key)
 ):
     try:
+        log_request(request, 200, api_key)
+        
         def stream_generator():
             full_response = []
             for chunk in llm.generate_stream(
@@ -131,4 +223,28 @@ async def generate_stream(
 
         return StreamingResponse(stream_generator(), media_type="text/plain")
     except Exception as e:
+        log_request(request, 500, api_key)
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/feedback")
+@limiter.limit("20/minute")
+async def collect_feedback(
+    request: Request,
+    feedback: FeedbackRequest,
+    background_tasks: BackgroundTasks,
+    api_key: str = Depends(get_api_key)
+):
+    background_tasks.add_task(
+        save_feedback, 
+        feedback.prompt, 
+        feedback.response, 
+        feedback.feedback_type, 
+        feedback.comment
+    )
+    log_request(request, 200, api_key)
+    return {"status": "success", "message": "Feedback stored"}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
