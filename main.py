@@ -30,6 +30,9 @@ app = FastAPI(
     version="1.1.0"
 )
 
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
 # 🔒 Secure CORS Configuration
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
@@ -39,6 +42,26 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["X-API-Key", "X-API-Secret", "X-Master-Secret", "Content-Type", "Authorization"],
 )
+
+# 🛡️ Add Trusted Host Protection
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=["*"] if os.getenv("DEBUG") else ["site1-pf0m.onrender.com", "localhost", "127.0.0.1"]
+)
+
+# 🧱 Custom Security Headers Middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com fonts.googleapis.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data:; connect-src 'self';"
+        import uuid
+        response.headers["X-Request-ID"] = str(uuid.uuid4())
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.state.limiter = limiter
 
@@ -67,14 +90,21 @@ async def request_logger_middleware(request: Request, call_next):
     return response
 
 # Mount the static directory
-static_path = os.path.join(os.path.dirname(__file__), "static")
-if not os.path.exists(static_path):
-    os.makedirs(static_path)
-app.mount("/static", StaticFiles(directory=static_path), name="static")
+from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent
+static_path = BASE_DIR / "static"
+static_path.mkdir(exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
 @app.get("/")
 async def read_index():
-    return FileResponse(os.path.join(static_path, "index.html"))
+    index_file = static_path / "index.html"
+    if not index_file.exists():
+        # Help diagnose missing files in deployment
+        logger.error(f"index.html not found at {index_file}")
+        return {"detail": f"Frontend missing. Expected at {index_file}"}
+    return FileResponse(str(index_file))
 
 # --- Pydantic Models for Input Validation ---
 
