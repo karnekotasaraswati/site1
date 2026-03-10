@@ -1,5 +1,6 @@
 import os
 import threading
+from datetime import datetime
 from llama_cpp import Llama
 from huggingface_hub import hf_hub_download
 import glob
@@ -45,11 +46,12 @@ class LLMManager:
             
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=2048,
-                n_threads=4, # Hardcoded to 4 threads for physical core optimization
-                n_batch=512,
+                n_ctx=512,  # Reduced from 2048 to save RAM
+                n_threads=2, # Reduced from 4 for better stability
+                n_batch=128, # Reduced from 512 to save RAM
                 verbose=False
             )
+
             print("Model loaded successfully.")
 
     def get_context(self):
@@ -66,7 +68,7 @@ class LLMManager:
         # Quick greeting check for 100% accuracy and speed
         clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
         if clean_prompt in ["hello", "hi", "hey", "greetings", "hi there"]:
-            return "Hello! I am your StarZopp assistant. How can I help you today?"
+            return "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?"
 
         if self.model is None:
             self.load_model()
@@ -74,6 +76,7 @@ class LLMManager:
         context = self.get_context()
         # Prompt optimized for concise paragraph summaries
         formatted_prompt = f"""<|system|>You are the official StarZopp Expert. 
+- The current date and year is {datetime.now().strftime("%B %d, %Y")}.
 - Provide a concise, professional summary in a single short paragraph.
 - Use ONLY the DATABASE below.
 - Do NOT use bullet points unless specifically asked.
@@ -100,7 +103,7 @@ DATABASE:
         # Quick greeting check for 100% accuracy and speed (stream)
         clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
         if clean_prompt in ["hello", "hi", "hey", "greetings", "hi there"]:
-            yield "Hello! I am your StarZopp assistant. How can I help you today?"
+            yield "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?"
             return
 
         if self.model is None:
@@ -109,6 +112,7 @@ DATABASE:
         context = self.get_context()
         # Prompt optimized for concise paragraph summaries (stream)
         formatted_prompt = f"""<|system|>You are the official StarZopp Expert. 
+- The current date and year is {datetime.now().strftime("%B %d, %Y")}.
 - Provide a concise, professional summary in a single short paragraph.
 - Use ONLY the DATABASE below.
 - Do NOT use bullet points unless specifically asked.

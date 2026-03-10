@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage API Keys | StarZopp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-light: #6366f1;
+            --bg-sidebar: #f9fafb;
+            --bg-main: #ffffff;
+            --border-color: #e5e7eb;
+            --text-main: #111827;
+            --text-muted: #6b7280;
+            --header-h: 64px;
+            --sidebar-w: 240px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            height: var(--header-h);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: #fff;
+            z-index: 100;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 800;
+            font-size: 20px;
+            color: var(--primary);
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 4px 12px;
+            border-radius: 50px;
+            background: var(--bg-sidebar);
+            cursor: pointer;
+        }
+
+        .user-avatar {
+            width: 28px;
+            height: 28px;
+            background: #facc15;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 12px;
+            color: #854d0e;
+        }
+
+        .user-info {
+            text-align: left;
+        }
+
+        .user-name {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .user-email {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .layout-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        aside {
+            width: var(--sidebar-w);
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            padding: 24px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .nav-item:hover {
+            background: #f3f4f6;
+            color: var(--text-main);
+        }
+
+        .nav-item.active {
+            background: #fff;
+            color: var(--primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        main {
+            flex: 1;
+            padding: 48px;
+            overflow-y: auto;
+        }
+
+        .view-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .view-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .content-header h1 {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: #fff;
+            color: var(--text-main);
+        }
+
+        .btn-primary:hover {
+            background: var(--bg-sidebar);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        thead {
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            text-align: left;
+            padding: 16px;
+        }
+
+        td {
+            padding: 24px 16px;
+            border-bottom: 1px solid #f9fafb;
+            color: #4b5563;
+        }
+
+        .key-id {
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: #f3f4f6;
+            color: var(--text-main);
+        }
+
+        .icon-btn.delete:hover {
+            color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+        }
+
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .modal-btns {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .success-display {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .success-display code {
+            display: block;
+            background: #fff;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin-top: 8px;
+        }
+
+        /* Coming Soon Placeholder */
+        .coming-soon {
+            text-align: center;
+            padding: 100px 20px;
+            color: var(--text-muted);
+        }
+
+        .coming-soon i {
+            width: 64px;
+            height: 64px;
+            color: var(--primary);
+            margin-bottom: 24px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="logo-section">
+            <div class="logo-icon">C</div>
+            <span>Chatbot Interface</span>
+        </div>
+        <div class="header-actions">
+            <i data-lucide="bell" style="width: 20px; color: var(--text-muted); cursor: pointer;"></i>
+            <div class="user-profile">
+                <div class="user-avatar">D</div>
+                <div class="user-info">
+                    <div class="user-name">Developer</div>
+                    <div class="user-email">developer@chatbot.com</div>
+                </div>
+                <i data-lucide="chevron-down" style="width: 14px; margin-left: 4px;"></i>
+            </div>
+        </div>
+    </header>
+
+    <div class="layout-body">
+        <aside id="sidebar">
+            <div class="nav-item" data-view="view-account"><i data-lucide="user"></i> Account</div>
+            <div class="nav-item" data-view="view-security"><i data-lucide="shield"></i> Security</div>
+            <div class="nav-item" data-view="view-signatures"><i data-lucide="pen-tool"></i> Signatures</div>
+            <div class="nav-item" data-view="view-stamps"><i data-lucide="stamp"></i> Stamps</div>
+            <div class="nav-item" data-view="view-notifications"><i data-lucide="bell"></i> Notifications</div>
+            <div class="nav-item" data-view="view-integrations"><i data-lucide="layers"></i> Integrations</div>
+            <div class="nav-item" data-view="view-audit"><i data-lucide="file-text"></i> Audit logs</div>
+            <div class="nav-item active" data-view="view-keys"><i data-lucide="key"></i> Manage API keys</div>
+        </aside>
+
+        <main id="main-content">
+            <!-- Manage Keys View -->
+            <div id="view-keys" class="view-content active">
+                <div class="content-header">
+                    <h1>Manage API keys</h1>
+                    <button class="btn btn-primary" onclick="openModal()">Generate API key</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>API KEY</th>
+                            <th>SECRET KEY</th>
+                            <th>DESCRIPTION</th>
+                            <th>LAST USED</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="keysTableBody"></tbody>
+                </table>
+            </div>
+
+            <!-- Coming Soon Views -->
+            <div id="placeholder-view" class="view-content">
+                <div class="coming-soon">
+                    <i data-lucide="layout" id="placeholder-icon"></i>
+                    <h2 id="placeholder-title">Section Title</h2>
+                    <p>This module is currently under development. Please check back later.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal -->
+    <div class="modal" id="keyModal">
+        <div class="modal-content">
+            <div class="modal-title">Generate new API key</div>
+            <div class="form-group">
+                <label>Master Secret (Admin Access)</label>
+                <input type="password" id="masterSecret" placeholder="••••••••">
+            </div>
+            <div class="form-group">
+                <label>Key Description</label>
+                <input type="text" id="keyDesc" placeholder="e.g. Home PC, Production API">
+            </div>
+            <div class="success-display" id="keyResults">
+                <label>Copy your new API Key:</label>
+                <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+                    <code id="newApiKey" style="flex: 1; margin-top: 0;"></code>
+                    <button class="icon-btn" onclick="copyResultKey()" title="Copy & Activate"><i
+                            data-lucide="zap"></i></button>
+                </div>
+                <label style="margin-top: 12px;">Secret Key:</label>
+                <code id="newSecretKey"></code>
+                <p style="font-size: 11px; color: #10b981; margin-top: 8px; font-weight: 500;">✓ Click the lightning
+                    bolt to activate this key for your chat session!</p>
+            </div>
+            <div class="modal-btns">
+                <button class="btn" style="border: none;" onclick="closeModal()">Close</button>
+                <button class="btn" style="background: var(--primary); color: white; border: none;" id="confirmBtn"
+                    onclick="generateKey()">Generate</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        const modal = document.getElementById('keyModal');
+        const results = document.getElementById('keyResults');
+        const masterInput = document.getElementById('masterSecret');
+        const descInput = document.getElementById('keyDesc');
+        const confirmBtn = document.getElementById('confirmBtn');
+
+        // Sidebar Navigation Logic
+        const navItems = document.querySelectorAll('.nav-item');
+        const views = document.querySelectorAll('.view-content');
+
+        navItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const targetViewId = item.getAttribute('data-view');
+
+                // Update active state
+                navItems.forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+
+                // Update visible view
+                views.forEach(v => v.classList.remove('active'));
+
+                if (targetViewId === 'view-keys') {
+                    document.getElementById('view-keys').classList.add('active');
+                    loadKeys();
+                } else {
+                    const placeholder = document.getElementById('placeholder-view');
+                    placeholder.classList.add('active');
+                    document.getElementById('placeholder-title').textContent = item.textContent.trim();
+                    // Update icon dynamically
+                    const iconName = item.querySelector('i').getAttribute('data-lucide');
+                    const iconEl = document.getElementById('placeholder-icon');
+                    iconEl.setAttribute('data-lucide', iconName);
+                    lucide.createIcons();
+                }
+            });
+        });
+
+        function openModal() {
+            modal.classList.add('show');
+            results.style.display = 'none';
+            confirmBtn.style.display = 'block';
+            masterInput.value = localStorage.getItem('masterSecret') || '';
+        }
+
+        function closeModal() {
+            modal.classList.remove('show');
+            loadKeys();
+        }
+
+        function formatLastUsed(dateStr) {
+            if (!dateStr || dateStr === "Never") return "Never used";
+
+            // SQLite CURRENT_TIMESTAMP is UTC
+            // Standardize format to avoid Date parsing issues
+            const lastUsed = new Date(dateStr.replace(' ', 'T') + "Z");
+            if (isNaN(lastUsed)) return dateStr;
+
+            const now = new Date();
+            const diffMs = now - lastUsed;
+            const diffMins = Math.floor(diffMs / 60000);
+
+            if (diffMins < 1) return "Just now";
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+            return lastUsed.toLocaleDateString();
+        }
+
+        async function loadKeys() {
+            const master = localStorage.getItem('masterSecret') || "admin123";
+            try {
+                const response = await fetch('/list-api-keys', {
+                    headers: { 'X-Master-Secret': master }
+                });
+
+                if (response.status === 401) {
+                    console.error("Unauthorized to load keys");
+                    return;
+                }
+
+                const data = await response.json();
+                const tbody = document.getElementById('keysTableBody');
+                tbody.innerHTML = '';
+
+                data.forEach(key => {
+                    const row = `
+                        <tr>
+                            <td class="key-id" title="${key.api_key}">${key.api_key}</td>
+                            <td class="key-id" style="color: #6b7280; font-family: monospace;">${key.secret_key || 'No secret'}</td>
+                            <td>${key.description}</td>
+                            <td>${formatLastUsed(key.last_used)}</td>
+                            <td>
+                                <div class="action-btns">
+                                    <button class="icon-btn" title="Copy API Key" onclick="copyText('${key.api_key}')"><i data-lucide="copy"></i></button>
+                                    <button class="icon-btn" title="Copy Secret Key" onclick="copyText('${key.secret_key}')"><i data-lucide="key"></i></button>
+                                    <button class="icon-btn delete" title="Delete" onclick="deleteKey(${key.id})"><i data-lucide="x"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+                lucide.createIcons();
+            } catch (error) {
+                console.error("Failed to load keys", error);
+            }
+        }
+
+        function useInChat() {
+            alert("To test 'Last Used':\n1. Generate a NEW key.\n2. COPY the full API Key from the result.\n3. Go to the Chatbot and use it to send a message.\n4. Come back here and refresh to see the time update!");
+        }
+
+        function copyResultKey() {
+            const key = document.getElementById('newApiKey').textContent;
+            const secret = document.getElementById('newSecretKey').textContent;
+            navigator.clipboard.writeText(key);
+            localStorage.setItem('activeChatKey', key);
+            localStorage.setItem('activeChatSecret', secret);
+            alert("API Key & Secret copied and ACTIVATED! You can now go to the Chat interface and it will work automatically.");
+        }
+
+        async function generateKey() {
+            const master = masterInput.value;
+            const desc = descInput.value || "New Key";
+            localStorage.setItem('masterSecret', master);
+
+            try {
+                const response = await fetch(`/generate-api-key?description=${encodeURIComponent(desc)}`, {
+                    headers: { 'X-Master-Secret': master }
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('newApiKey').textContent = data.api_key;
+                    document.getElementById('newSecretKey').textContent = data.api_secret;
+                    results.style.display = 'block';
+                    confirmBtn.style.display = 'none';
+                } else {
+                    alert(data.detail || "Generation failed. Check Master Secret.");
+                }
+            } catch (error) {
+                alert("Network error during generation");
+            }
+        }
+
+        async function deleteKey(id) {
+            if (!confirm("Are you sure you want to revoke this key?")) return;
+            const master = localStorage.getItem('masterSecret') || "admin123";
+
+            try {
+                const response = await fetch(`/revoke-api-key/${id}`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Master-Secret': master,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    loadKeys();
+                } else {
+                    let errMessage = "Revoke failed";
+                    try {
+                        const err = await response.json();
+                        errMessage += ": " + (err.detail || "Unknown error");
+                    } catch (e) {
+                        errMessage += " (Status " + response.status + ")";
+                    }
+                    alert(errMessage);
+                }
+            } catch (error) {
+                console.error("Revocation error:", error);
+                alert("Network error: Check if the server is running or if your Master Secret is correct.");
+            }
+        }
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text);
+            alert("Copied to clipboard!");
+        }
+
+        // Initial Load
+        loadKeys();
+    </script>
+</body>
+
+</html>
