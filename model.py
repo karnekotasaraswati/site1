@@ -120,10 +120,17 @@ DATABASE: {context}</s>
             "feature": "StarZopp features: 1. Dynamic Portfolios, 2. Real-Time Messaging, 3. AI Smart Search, 4. Job Boards, 5. Growth Analytics, and 6. Verified Professional Profiles.",
             "mission": "Our mission is to provide a centralized digital ecosystem for creative jobs, collaborations, and professional growth globally.",
             "level up": "Leveling up on StarZopp requires Mastering: Strategic Portfolio Curation, Community Engagement, Profile Verification, and Analytics-Driven Optimization.",
+            "job": "To apply for jobs, use our Integrated Job & Collaboration Boards. It's a dedicated marketplace for creative gigs, full-time roles, and projects.",
+            "apply": "You can apply for creative roles directly through the StarZopp Job Boards which connect talent with recruiters in Film, Music, and Fashion.",
+            "search": "Our AI-Powered Smart Search helps you find the right collaborators or recruiters based on skills, past projects, and location.",
+            "portfolio": "Display your work using Dynamic Portfolio Showcases. You can host high-quality video, audio, and images to tell your professional story.",
+            "message": "Use our Real-Time Messaging tools for secure, instant communication and professional outreach within the creative community.",
+            "verify": "To get verified, complete all platform safety and authenticity checks in your profile settings to build developer trust.",
             "contact": "You can connect with the StarZopp community directly through the platform's real-time messaging and job boards.",
             "hello": "Hello! I'm stazzy, your Starzopp assistant. I provide verified information about our creative networking platform. How can I help you today?",
             "hi": "Hi there! I'm here to help you navigate StarZopp. What would you like to know about our features or mission?"
         }
+
 
         # Priority keyword check for 100% Accuracy + 0s Speed
         for key in instant_facts:
