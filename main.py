@@ -30,7 +30,7 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Starzopp AI API",
     description="Secure Backend for Stazzy - Starzopp AI Assistant",
-    version="1.1.2" # Incremented version for debug visibility
+    version="1.1.5" # Incremented for clear build verification
 )
 
 
@@ -43,9 +43,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["X-API-Key", "X-API-Secret", "X-Master-Secret", "Content-Type", "Authorization"],
+    allow_methods=["*"], # Allow all methods for better frontend compatibility
+    allow_headers=["*"], # Allow all headers including custom ones like X-API-Key
 )
+
 
 # 🛡️ Add Trusted Host Protection
 app.add_middleware(
@@ -116,14 +117,16 @@ static_path.mkdir(exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
 
-@app.get("/")
 @app.get("/ping")
 async def ping_root():
-    return {"status": "online", "message": "Starzopp API is running", "path": "/"}
+    return {"status": "online", "message": "Starzopp API is running", "path": "/ping"}
 
+
+@app.get("/")
 @app.get("/stazzy")
 @app.get("/index.html")
 @app.get("/chat")
+
 async def read_index():
     index_file = static_path / "index.html"
     if not index_file.exists():
@@ -167,9 +170,10 @@ class FeedbackRequest(BaseModel):
 
 class GenerateRequest(BaseModel):
     prompt: str
-    max_tokens: Optional[int] = 80
+    max_tokens: Optional[int] = 120 # Fast default
     temperature: Optional[float] = 0.7
-    top_p: Optional[float] = 0.9
+    top_p: Optional[float] = 0.95
+
 
 class KeyGenerationResponse(BaseModel):
     api_key: str
@@ -198,8 +202,10 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": time.time(),
+        "version": "1.1.5",
         "model": "TinyLlama-1.1B-Chat-v1.0"
     }
+
 
 @app.get("/list-api-keys")
 @limiter.limit("5/minute")

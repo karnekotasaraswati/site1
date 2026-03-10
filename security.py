@@ -28,7 +28,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("api_requests.log")
+        logging.FileHandler("api_requests.log", encoding="utf-8")
+
     ]
 )
 logger = logging.getLogger("api_security")
@@ -66,29 +67,35 @@ def get_api_key(
         )
     
     if not api_secret:
-        # Check if the key exists in the environment keys (which don't require an explicit secret)
-        # We pre-load these as VALID_KEY_PAIRS[key] = None in database.py
-        if api_key.strip() in VALID_KEY_PAIRS and VALID_KEY_PAIRS[api_key.strip()] is None:
-            # This is an environment-level key, allow it without secret
-            pass
+        clean_key = api_key.strip()
+        # Allow pre-configured keys (like environment variables) to pass without a secret
+        if clean_key in VALID_KEY_PAIRS:
+            return clean_key
         else:
+            logger.warning(f"Anonymous key attempt or missing secret: {clean_key}")
             log_request(request, 403, api_key)
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="API Secret missing"
+                status_code=status.HTTP_403_FORBIDDEN, detail="API Secret missing or Invalid Key"
             )
+
+
 
 
     # Clean the input keys
     clean_key = api_key.strip()
-    clean_secret = api_secret.strip()
+    # Handle the case where api_secret is None because it was allowed to pass above
+    clean_secret = api_secret.strip() if api_secret else ""
+
 
     # Priority 1: Check in-memory cache (FASTEST)
     if clean_key in VALID_KEY_PAIRS:
         expected_secret = VALID_KEY_PAIRS[clean_key]
-        if expected_secret is None or clean_secret == expected_secret:
+        # Allow if secret matches, or if no secret was provided (for known keys)
+        if expected_secret is None or clean_secret == expected_secret or clean_secret == "":
             from database import update_key_usage
             update_key_usage(clean_key)
             return clean_key
+
 
     # Priority 2: Check database (fallback for newly generated keys not yet in cache)
     if verify_api_key_pair(clean_key, clean_secret):

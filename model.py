@@ -46,11 +46,13 @@ class LLMManager:
             
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=512,  # Reduced from 2048 to save RAM
-                n_threads=2, # Reduced from 4 for better stability
-                n_batch=128, # Reduced from 512 to save RAM
+                n_ctx=1024,   # Reduced context to significantly save RAM (was 2048)
+                n_threads=2,  # Optimal for 2-core instances
+                n_batch=32,   # Small batches prevent RAM spikes (was 128)
                 verbose=False
             )
+
+
 
             print("Model loaded successfully.")
 
@@ -64,7 +66,9 @@ class LLMManager:
                 pass
         return ""
 
-    def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.9):
+    def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7, top_p: float = 0.95):
+
+
         # Quick greeting check for 100% accuracy and speed
         clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
         if clean_prompt in ["hello", "hi", "hey", "greetings", "hi there"]:
@@ -99,7 +103,8 @@ DATABASE:
         
         return response["choices"][0]["text"].strip()
 
-    def generate_stream(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.9):
+    def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.7, top_p: float = 0.95):
+
         # Quick greeting check for 100% accuracy and speed (stream)
         clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
         if clean_prompt in ["hello", "hi", "hey", "greetings", "hi there"]:
