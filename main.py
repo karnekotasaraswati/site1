@@ -48,11 +48,8 @@ app.add_middleware(
 )
 
 
-# 🛡️ Add Trusted Host Protection
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=["*"] # Allow all hosts for now to fix connection issues
-)
+# Trusted Host is handled by Render's proxy, removing middleware for better compatibility
+
 
 
 # 🧱 Custom Security Headers Middleware
@@ -185,11 +182,19 @@ class KeyGenerationResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    init_db()
-    refresh_key_cache()
-    # 🚀 Start loading model in background so health-check doesn't fail
+    # 🚀 Run all heavy setup in a thread so the link opens INSTANTLY
     import threading
-    threading.Thread(target=llm.load_model).start()
+    def background_setup():
+        try:
+            init_db()
+            refresh_key_cache()
+            llm.load_model()
+            print("Setup Complete.")
+        except Exception as e:
+            print(f"Setup Error: {e}")
+            
+    threading.Thread(target=background_setup).start()
+
 
 
 @app.get("/verify-token")

@@ -46,12 +46,13 @@ class LLMManager:
             
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=512,
-                n_threads=1, # Single thread for Render stability
-                n_batch=4,   # Lower batch for faster response start
+                n_ctx=384,   # Minimal memory footprint
+                n_threads=1, # Lowest CPU strain
+                n_batch=4,   # Stable processing
                 use_mlock=False,
                 verbose=False
             )
+
 
 
 
