@@ -186,10 +186,11 @@ class KeyGenerationResponse(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     init_db()
-    # 🚀 Pre-load API keys into memory cache for zero-latency lookups
     refresh_key_cache()
-    print("Loading model...")
-    llm.load_model()
+    # 🚀 Start loading model in background so health-check doesn't fail
+    import threading
+    threading.Thread(target=llm.load_model).start()
+
 
 @app.get("/verify-token")
 async def verify_token(request: Request, api_key: str = Depends(get_api_key)):

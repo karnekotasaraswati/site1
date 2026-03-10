@@ -46,12 +46,13 @@ class LLMManager:
             
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=512,    # Smaller context = faster start
-                n_threads=4,  # Use more power for inference
-                n_batch=8,    # Better prompt processing
+                n_ctx=512,
+                n_threads=1, # Single thread for Render stability
+                n_batch=4,   # Lower batch for faster response start
                 use_mlock=False,
                 verbose=False
             )
+
 
 
 
