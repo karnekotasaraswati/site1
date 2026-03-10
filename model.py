@@ -71,31 +71,15 @@ class LLMManager:
                 pass
         return ""
 
-    def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7, top_p: float = 0.95):
-        clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
-        
-        # 🚀 TURBO FAST-PATH: Instant response
-        quick_answers = {
-            "hello": "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?",
-            "hi": "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?",
-            "starzopp": "StarZopp is the premier professional networking ecosystem for the creative industries (Film, Music, Fashion). We bridge the gap between creative talent and industry opportunities through digital portfolios, messaging, and AI-powered smart search.",
-            "what is starzopp": "StarZopp is a dedicated collaboration platform for creatives in Film, Music, and Fashion. It features dynamic portfolios, real-time messaging, and an integrated job board to help talent and recruiters connect seamlessly.",
-            "about": "StarZopp is built to empower creators. Our platform offers professional verification, analytics, and smart search tools to help you grow your career in the creative world."
-        }
-        for key in quick_answers:
-            if key in clean_prompt:
-                return quick_answers[key]
-
+    def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.5, top_p: float = 0.9):
         if self.model is None:
             self.load_model()
         
         context = self.get_context()
-        # Prompt optimized for concise paragraph summaries
-        formatted_prompt = f"""<|system|>StarZopp Expert. Respond in one concise paragraph.
+        formatted_prompt = f"""<|system|>StarZopp Expert. Respond in one concise paragraph. Use ONLY the database provided.
 DATABASE: {context}</s>
 <|user|>{prompt}</s>
 <|assistant|>"""
-
         
         with self._lock:
             response = self.model(
@@ -109,50 +93,17 @@ DATABASE: {context}</s>
         
         return response["choices"][0]["text"].strip()
 
-    def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.2, top_p: float = 0.9):
-        clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "").replace("?", "")
-        
-        # 🎯 VERIFIED ACCURACY HUB: 0-1s Instant Delivery for Official Facts
-        # These are pre-verified answers that bypass the LLM for 100% accuracy.
-        instant_facts = {
-            "starzopp": "StarZopp is the premier professional networking platform for creative industries (Film, Music, Fashion). We bridge the gap between creative talent and industry opportunities.",
-            "what is": "StarZopp is the official networking ecosystem for creatives in Film, Music, and Fashion. It provides dynamic portfolios, messaging, and AI-powered tools for professional growth.",
-            "feature": "StarZopp features: 1. Dynamic Portfolios, 2. Real-Time Messaging, 3. AI Smart Search, 4. Job Boards, 5. Growth Analytics, and 6. Verified Professional Profiles.",
-            "mission": "Our mission is to provide a centralized digital ecosystem for creative jobs, collaborations, and professional growth globally.",
-            "level up": "Leveling up on StarZopp requires Mastering: Strategic Portfolio Curation, Community Engagement, Profile Verification, and Analytics-Driven Optimization.",
-            "job": "To apply for jobs, use our Integrated Job & Collaboration Boards. It's a dedicated marketplace for creative gigs, full-time roles, and projects.",
-            "apply": "You can apply for creative roles directly through the StarZopp Job Boards which connect talent with recruiters in Film, Music, and Fashion.",
-            "search": "Our AI-Powered Smart Search helps you find the right collaborators or recruiters based on skills, past projects, and location.",
-            "portfolio": "Display your work using Dynamic Portfolio Showcases. You can host high-quality video, audio, and images to tell your professional story.",
-            "message": "Use our Real-Time Messaging tools for secure, instant communication and professional outreach within the creative community.",
-            "verify": "To get verified, complete all platform safety and authenticity checks in your profile settings to build developer trust.",
-            "contact": "You can connect with the StarZopp community directly through the platform's real-time messaging and job boards.",
-            "hello": "Hello! I'm stazzy, your Starzopp assistant. I provide verified information about our creative networking platform. How can I help you today?",
-            "hi": "Hi there! I'm here to help you navigate StarZopp. What would you like to know about our features or mission?"
-        }
-
-
-        # Priority keyword check for 100% Accuracy + 0s Speed
-        for key in instant_facts:
-            if key in clean_prompt:
-                yield f"[VERIFIED] {instant_facts[key]}"
-                return
-
+    def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.5, top_p: float = 0.9):
         if self.model is None:
             self.load_model()
 
         context = self.get_context()
-        # Grounding Prompt: Strictly forces the AI to use ONLY the provided facts.
-        formatted_prompt = f"""<|system|>You are the StarZopp Fact Bot. 
-RULES:
-1. ONLY use the DATABASE below.
-2. If the answer is NOT in the DATABASE, say 'I only provide verified StarZopp information.'
-3. Be professional and concise.
-
-DATABASE:
-{context}</s>
+        formatted_prompt = f"""<|system|>StarZopp Expert. Respond in one concise paragraph based on the database.
+DATABASE: {context}</s>
 <|user|>{prompt}</s>
 <|assistant|>"""
+
+
 
 
         with self._lock:

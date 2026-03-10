@@ -612,30 +612,9 @@
             addMessage(prompt, 'user');
             msgInput.value = "";
 
-            // 🚀 BLAZING FAST FRONTEND HUB (0.01s - 0.5s local responses)
-            const cleanPrompt = prompt.toLowerCase().trim().replace(/[?!.]/g, '');
-            const hub = {
-                "starzopp": "StarZopp is the premier professional networking ecosystem built for creative industries like Film, Music, and Fashion.",
-                "what is starzopp": "StarZopp is a tailored collaboration platform for creatives, featuring dynamic portfolios, messaging, and AI-powered recruiting tools.",
-                "feature": "Key features: 1. Dynamic Portfolios, 2. Real-Time Messaging, 3. AI Smart Search, 4. Job Boards, 5. Growth Analytics, and 6. Verified Profiles.",
-                "mission": "Our mission is to empower creatives by providing a centralized digital ecosystem for jobs, collaborations, and career growth.",
-                "job": "Apply for creative roles via our Job & Collaboration Boards, a marketplace for gigs, full-time roles, and cooperative projects.",
-                "apply": "Apply for creative roles via our Job & Collaboration Boards, a marketplace for gigs, full-time roles, and cooperative projects.",
-                "portfolio": "Display work with Dynamic Portfolio Showcases, perfect for high-quality video, audio, and images.",
-                "search": "AI-Powered Smart Search helps find recruiters and collaborators based on specific creative skills and location.",
-                "message": "Secure Real-Time Messaging facilitates instant collaboration and professional outreach on StarZopp.",
-                "hello": "Hello! I'm stazzy, your Starzopp assistant. What can I find for you today?",
-                "hi": "Hi there! Ready to explore or grow on StarZopp? Ask me anything!"
-            };
+            // Send to AI for full variety
 
-            for (let k in hub) {
-                if (cleanPrompt.includes(k)) {
-                    setTimeout(() => {
-                        addMessage(hub[k], 'ai', { duration_seconds: 0.01, model: "Instant Fact Hub" });
-                    }, 50);
-                    return;
-                }
-            }
+
 
             // Fallback to Server-side AI
             typingIndicator.style.display = "block";
@@ -718,8 +697,7 @@
                 const meta = document.createElement("div");
                 meta.className = "meta-text";
                 meta.innerHTML = `
-                    <span class="accuracy-badge">✓ Verified Accuracy</span>
-                    <span>${metadata.duration_seconds}s | ${metadata.model}</span>
+                    <span>${metadata.duration_seconds}s | ${metadata.model} Generator</span>
                 `;
                 wrapper.appendChild(meta);
             }
