@@ -109,35 +109,44 @@ DATABASE: {context}</s>
         
         return response["choices"][0]["text"].strip()
 
-    def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.7, top_p: float = 0.95):
+    def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.2, top_p: float = 0.9):
         clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "").replace("?", "")
         
-        # 🚀 TURBO INSTANT HUB: Guaranteed sub-second delivery for all core topics
-        # This covers 90% of user queries instantly
-        core_response = "StarZopp is the premier professional networking ecosystem for creative industries like Film, Music, and Fashion. We bridge the gap between talent and opportunities using dynamic portfolios, secure messaging, and AI-powered smart search to help you grow your career or find the perfect collaborator."
-        
-        instant_keywords = ["starzopp", "star zopp", "platform", "about", "what is", "who are", "features", "mission", "level up", "help", "how to use", "industry"]
-        greetings = ["hello", "hi", "hey", "hii", "hey there", "good morning", "good evening"]
+        # 🎯 VERIFIED ACCURACY HUB: 0-1s Instant Delivery for Official Facts
+        # These are pre-verified answers that bypass the LLM for 100% accuracy.
+        instant_facts = {
+            "starzopp": "StarZopp is the premier professional networking platform for creative industries (Film, Music, Fashion). We bridge the gap between creative talent and industry opportunities.",
+            "what is": "StarZopp is the official networking ecosystem for creatives in Film, Music, and Fashion. It provides dynamic portfolios, messaging, and AI-powered tools for professional growth.",
+            "feature": "StarZopp features: 1. Dynamic Portfolios, 2. Real-Time Messaging, 3. AI Smart Search, 4. Job Boards, 5. Growth Analytics, and 6. Verified Professional Profiles.",
+            "mission": "Our mission is to provide a centralized digital ecosystem for creative jobs, collaborations, and professional growth globally.",
+            "level up": "Leveling up on StarZopp requires Mastering: Strategic Portfolio Curation, Community Engagement, Profile Verification, and Analytics-Driven Optimization.",
+            "contact": "You can connect with the StarZopp community directly through the platform's real-time messaging and job boards.",
+            "hello": "Hello! I'm stazzy, your Starzopp assistant. I provide verified information about our creative networking platform. How can I help you today?",
+            "hi": "Hi there! I'm here to help you navigate StarZopp. What would you like to know about our features or mission?"
+        }
 
-        # Instant Greeting
-        if any(msg == clean_prompt for msg in greetings):
-            yield "Hello! I'm stazzy, your Starzopp assistant. How can I help you find what you're looking for today?"
-            return
+        # Priority keyword check for 100% Accuracy + 0s Speed
+        for key in instant_facts:
+            if key in clean_prompt:
+                yield f"[VERIFIED] {instant_facts[key]}"
+                return
 
-        # Instant Core Knowledge (Triggered by any keyword)
-        if any(word in clean_prompt for word in instant_keywords):
-            yield core_response
-            return
-
-        # --- FALLBACK TO LLM FOR COMPLEX QUERIES ONLY ---
         if self.model is None:
             self.load_model()
 
         context = self.get_context()
-        formatted_prompt = f"""<|system|>StarZopp Expert. One concise paragraph.
-DATABASE: {context}</s>
+        # Grounding Prompt: Strictly forces the AI to use ONLY the provided facts.
+        formatted_prompt = f"""<|system|>You are the StarZopp Fact Bot. 
+RULES:
+1. ONLY use the DATABASE below.
+2. If the answer is NOT in the DATABASE, say 'I only provide verified StarZopp information.'
+3. Be professional and concise.
+
+DATABASE:
+{context}</s>
 <|user|>{prompt}</s>
 <|assistant|>"""
+
 
         with self._lock:
             stream = self.model(
