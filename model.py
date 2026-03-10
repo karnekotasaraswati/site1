@@ -46,12 +46,13 @@ class LLMManager:
             
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=768,    # Keep context balanced
-                n_threads=1,  # Single thread is more predictable on Render
-                n_batch=4,    # Ultra-low batch for near-zero latency start
+                n_ctx=512,    # Smaller context = faster start
+                n_threads=4,  # Use more power for inference
+                n_batch=8,    # Better prompt processing
                 use_mlock=False,
                 verbose=False
             )
+
 
 
 
@@ -93,15 +94,20 @@ DATABASE: {context}</s>
         
         return response["choices"][0]["text"].strip()
 
-    def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.5, top_p: float = 0.9):
+    def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.4, top_p: float = 0.9):
+        # ⚡ Instant Greeting Speed-Boost (0.01s)
+        clean = prompt.lower().strip().replace(".", "")
+        if clean in {"hi", "hello", "hey", "hii"}:
+            yield "Hello! I am stazzy, your StarZopp AI. How can I assist you today?"
+            return
+
         if self.model is None:
             self.load_model()
 
         context = self.get_context()
-        formatted_prompt = f"""<|system|>StarZopp Expert. Respond in one concise paragraph based on the database.
-DATABASE: {context}</s>
-<|user|>{prompt}</s>
-<|assistant|>"""
+        # ⚡ Short prompt = faster "thinking" phase
+        formatted_prompt = f"<|system|>StarZopp AI. Knowledge: {context}</s><|user|>{prompt}</s><|assistant|>"
+
 
 
 
