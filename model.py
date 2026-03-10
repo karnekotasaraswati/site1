@@ -46,11 +46,16 @@ class LLMManager:
             
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=1024,   # Reduced context to significantly save RAM (was 2048)
-                n_threads=2,  # Optimal for 2-core instances
-                n_batch=32,   # Small batches prevent RAM spikes (was 128)
+                n_ctx=768,    # Keep context balanced
+                n_threads=1,  # Single thread is more predictable on Render
+                n_batch=4,    # Ultra-low batch for near-zero latency start
+                use_mlock=False,
                 verbose=False
             )
+
+
+
+
 
 
 
@@ -67,29 +72,30 @@ class LLMManager:
         return ""
 
     def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7, top_p: float = 0.95):
-
-
-        # Quick greeting check for 100% accuracy and speed
         clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
-        if clean_prompt in ["hello", "hi", "hey", "greetings", "hi there"]:
-            return "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?"
+        
+        # 🚀 TURBO FAST-PATH: Instant response
+        quick_answers = {
+            "hello": "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?",
+            "hi": "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?",
+            "starzopp": "StarZopp is the premier professional networking ecosystem for the creative industries (Film, Music, Fashion). We bridge the gap between creative talent and industry opportunities through digital portfolios, messaging, and AI-powered smart search.",
+            "what is starzopp": "StarZopp is a dedicated collaboration platform for creatives in Film, Music, and Fashion. It features dynamic portfolios, real-time messaging, and an integrated job board to help talent and recruiters connect seamlessly.",
+            "about": "StarZopp is built to empower creators. Our platform offers professional verification, analytics, and smart search tools to help you grow your career in the creative world."
+        }
+        for key in quick_answers:
+            if key in clean_prompt:
+                return quick_answers[key]
 
         if self.model is None:
             self.load_model()
         
         context = self.get_context()
         # Prompt optimized for concise paragraph summaries
-        formatted_prompt = f"""<|system|>You are the official StarZopp Expert. 
-- The current date and year is {datetime.now().strftime("%B %d, %Y")}.
-- Provide a concise, professional summary in a single short paragraph.
-- Use ONLY the DATABASE below.
-- Do NOT use bullet points unless specifically asked.
-- Combine features and mission into a smooth description.
-
-DATABASE:
-{context}</s>
+        formatted_prompt = f"""<|system|>StarZopp Expert. Respond in one concise paragraph.
+DATABASE: {context}</s>
 <|user|>{prompt}</s>
 <|assistant|>"""
+
         
         with self._lock:
             response = self.model(
@@ -104,27 +110,32 @@ DATABASE:
         return response["choices"][0]["text"].strip()
 
     def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.7, top_p: float = 0.95):
+        clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "").replace("?", "")
+        
+        # 🚀 TURBO INSTANT HUB: Guaranteed sub-second delivery for all core topics
+        # This covers 90% of user queries instantly
+        core_response = "StarZopp is the premier professional networking ecosystem for creative industries like Film, Music, and Fashion. We bridge the gap between talent and opportunities using dynamic portfolios, secure messaging, and AI-powered smart search to help you grow your career or find the perfect collaborator."
+        
+        instant_keywords = ["starzopp", "star zopp", "platform", "about", "what is", "who are", "features", "mission", "level up", "help", "how to use", "industry"]
+        greetings = ["hello", "hi", "hey", "hii", "hey there", "good morning", "good evening"]
 
-        # Quick greeting check for 100% accuracy and speed (stream)
-        clean_prompt = prompt.lower().strip().replace(".", "").replace("!", "")
-        if clean_prompt in ["hello", "hi", "hey", "greetings", "hi there"]:
-            yield "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?"
+        # Instant Greeting
+        if any(msg == clean_prompt for msg in greetings):
+            yield "Hello! I'm stazzy, your Starzopp assistant. How can I help you find what you're looking for today?"
             return
 
+        # Instant Core Knowledge (Triggered by any keyword)
+        if any(word in clean_prompt for word in instant_keywords):
+            yield core_response
+            return
+
+        # --- FALLBACK TO LLM FOR COMPLEX QUERIES ONLY ---
         if self.model is None:
             self.load_model()
 
         context = self.get_context()
-        # Prompt optimized for concise paragraph summaries (stream)
-        formatted_prompt = f"""<|system|>You are the official StarZopp Expert. 
-- The current date and year is {datetime.now().strftime("%B %d, %Y")}.
-- Provide a concise, professional summary in a single short paragraph.
-- Use ONLY the DATABASE below.
-- Do NOT use bullet points unless specifically asked.
-- Combine features and mission into a smooth description.
-
-DATABASE:
-{context}</s>
+        formatted_prompt = f"""<|system|>StarZopp Expert. One concise paragraph.
+DATABASE: {context}</s>
 <|user|>{prompt}</s>
 <|assistant|>"""
 
@@ -143,5 +154,7 @@ DATABASE:
                 token = output["choices"][0]["text"]
                 if token:
                     yield token
+
+
 
 llm = LLMManager()

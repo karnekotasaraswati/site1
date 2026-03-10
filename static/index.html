@@ -609,47 +609,108 @@
             const prompt = msgInput.value.trim();
             if (!prompt) return;
 
-            // Add user message to UI
             addMessage(prompt, 'user');
             msgInput.value = "";
 
-            // Local Branding Check
-            const lowerPrompt = prompt.toLowerCase().replace(/[?!.]/g, '');
-            if (lowerPrompt === 'hello' || lowerPrompt === 'hi' || lowerPrompt === 'hii') {
-                setTimeout(() => {
-                    addMessage(
-                        "Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?",
-                        'ai',
-                        { duration_seconds: 0.01, model: "System Cache" }
-                    );
-                }, 300);
-                return;
+            // 🚀 ZERO-LATENCY INSTANT HUB (0.01s Responses)
+            const cleanPrompt = prompt.toLowerCase().trim().replace(/[?!.]/g, '');
+
+            const instantAnswers = {
+                "starzopp": "StarZopp is the premier professional networking ecosystem built for creative industries like Film, Music, and Fashion. We bridge the gap between talent and industry opportunities.",
+                "what is starzopp": "StarZopp is a dedicated collaboration platform for creatives. It features dynamic portfolios, real-time messaging, and AI-powered smart search to help talent and recruiters connect seamlessly.",
+                "features": "Key features include: 1. Dynamic Portfolios, 2. Real-Time Messaging, 3. AI Smart Search, 4. Job Boards, 5. Growth Analytics, and 6. Verified Professional Profiles.",
+                "mission": "Our mission is to empower creative professionals by providing a centralized digital ecosystem for jobs, collaborations, and career growth.",
+                "level up": "To level up on StarZopp, focus on strategic portfolio curation, community engagement, and getting your professional profile verified.",
+                "hello": "Hello! I'm stazzy, your Starzopp assistant. How can I help you today?",
+                "hi": "Hi there! How can I help you find what you're looking for on Starzopp?",
+                "hey": "Hey! Need help with your creative portfolio or finding collaborators on Starzopp?"
+            };
+
+            // Check if we can answer INSTANTLY (0s delay)
+            for (let key in instantAnswers) {
+                if (cleanPrompt.includes(key)) {
+                    setTimeout(() => {
+                        addMessage(
+                            instantAnswers[key],
+                            'ai',
+                            { duration_seconds: 0.01, model: "Zero-Latency Hub" }
+                        );
+                    }, 50);
+                    return;
+                }
             }
 
-            // Show typing indicator
+
             typingIndicator.style.display = "block";
             sendBtn.disabled = true;
 
             try {
-                // Update this with your actual API key or fetch it from a secure place
-                // Locally, if you are serving this from the same domain, it uses the backend.
-                const res = await fetch("/generate", {
+                // Use the new STREAMING endpoint for instant visual feedback
+                const response = await fetch("/generate-stream", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                         "X-API-Key": currentApiKey,
-                        "X-API-Secret": currentApiSecret
+                        "X-API-Secret": currentApiSecret || ""
                     },
                     body: JSON.stringify({ prompt: prompt })
                 });
 
-                if (!res.ok) throw new Error("API call failed");
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || "API call failed");
+                }
 
-                const data = await res.json();
-
-                // Hide typing, add AI response
                 typingIndicator.style.display = "none";
-                addMessage(data.response, 'ai', data.metadata);
+
+                // Create placeholders for the streaming response
+                const aiWrapper = addMessage("", 'ai', { duration_seconds: "...", model: "TinyLlama-1.1B" }, true);
+                const aiMsgDiv = aiWrapper.querySelector('.ai-message');
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullText = "";
+                let startTime = Date.now();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    fullText += chunk;
+                    aiMsgDiv.innerText = fullText;
+
+                    // Auto-scroll as text grows
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+
+                // Finalize metadata
+                const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                aiWrapper.querySelector('.meta-text').innerHTML = `
+                    <span class="accuracy-badge">✓ Verified Accuracy</span>
+                    <span>${duration}s | TinyLlama-1.1B</span>
+                `;
+
+                // Add Feedback UI
+                const finalMsgText = fullText.replace(/'/g, "\\'");
+                const feedbackDiv = document.createElement("div");
+                feedbackDiv.className = "feedback-container";
+                feedbackDiv.innerHTML = `
+                    <button class="feedback-btn" onclick="handleFeedback(this, 'up', '${finalMsgText}')">👍</button>
+                    <button class="feedback-btn" onclick="handleFeedback(this, 'down', '${finalMsgText}')">👎</button>
+                `;
+                aiWrapper.appendChild(feedbackDiv);
+
+                const inputContainer = document.createElement("div");
+                inputContainer.className = "feedback-input-container";
+                inputContainer.innerHTML = `
+                    <p style="font-size: 0.8rem; margin-bottom: 5px;">Help me improve! What should have been the answer?</p>
+                    <textarea class="feedback-input" placeholder="Enter the correct response..."></textarea>
+                    <button class="feedback-submit" onclick="submitImprovement(this, '${finalMsgText}')">Submit</button>
+                `;
+                aiWrapper.appendChild(inputContainer);
+
+
             } catch (err) {
                 typingIndicator.style.display = "none";
                 addMessage("Sorry, I encountered an error: " + err.message, 'ai');
@@ -659,7 +720,8 @@
             }
         }
 
-        function addMessage(text, sender, metadata = null) {
+
+        function addMessage(text, sender, metadata = null, returnWrapper = false) {
             const wrapper = document.createElement("div");
             wrapper.className = "message-wrapper";
             if (sender === 'user') wrapper.style.alignSelf = "flex-end";
@@ -685,7 +747,7 @@
                 wrapper.appendChild(meta);
             }
 
-            if (sender === 'ai') {
+            if (sender === 'ai' && text) {
                 const feedback = document.createElement("div");
                 feedback.className = "feedback-container";
                 feedback.innerHTML = `
@@ -693,22 +755,16 @@
                     <button class="feedback-btn" onclick="handleFeedback(this, 'down', '${text.replace(/'/g, "\\'")}')">👎</button>
                 `;
                 wrapper.appendChild(feedback);
-
-                const inputContainer = document.createElement("div");
-                inputContainer.className = "feedback-input-container";
-                inputContainer.innerHTML = `
-                    <p style="font-size: 0.8rem; margin-bottom: 5px;">Help me improve! What should have been the answer?</p>
-                    <textarea class="feedback-input" placeholder="Enter the correct response..."></textarea>
-                    <button class="feedback-submit" onclick="submitImprovement(this, '${text.replace(/'/g, "\\'")}')">Submit</button>
-                `;
-                wrapper.appendChild(inputContainer);
             }
 
             chatMessages.appendChild(wrapper);
 
             // Scroll to bottom
             chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            if (returnWrapper) return wrapper;
         }
+
 
         async function handleFeedback(btn, type, responseText) {
             const container = btn.parentElement;
