@@ -300,8 +300,11 @@ async def generate_stream(
     try:
         log_request(request, 200, api_key)
         
-        def stream_generator():
+        async def stream_generator():
             full_response = []
+            # 🚀 PROXY-WAKEUP: Send a tiny byte immediately to force the proxy connection open
+            yield " " 
+            
             for chunk in llm.generate_stream(
                 generate_request.prompt, 
                 generate_request.max_tokens,
@@ -311,10 +314,20 @@ async def generate_stream(
                 full_response.append(chunk)
                 yield chunk
             
-            # Save to database one finished (in background)
+            # Save to database once finished (in background)
             background_tasks.add_task(save_chat, generate_request.prompt, "".join(full_response))
 
-        return StreamingResponse(stream_generator(), media_type="text/plain")
+
+        return StreamingResponse(
+            stream_generator(), 
+            media_type="text/plain",
+            headers={
+                "X-Accel-Buffering": "no",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+
     except Exception as e:
         log_request(request, 500, api_key)
         raise HTTPException(status_code=500, detail=str(e))

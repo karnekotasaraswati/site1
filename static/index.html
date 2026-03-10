@@ -612,47 +612,36 @@
             addMessage(prompt, 'user');
             msgInput.value = "";
 
-            // 🚀 ZERO-LATENCY INSTANT HUB (0.01s Responses)
+            // 🚀 BLAZING FAST FRONTEND HUB (0.01s - 0.5s local responses)
             const cleanPrompt = prompt.toLowerCase().trim().replace(/[?!.]/g, '');
-
-            const instantAnswers = {
-                "starzopp": "StarZopp is the premier professional networking ecosystem built for creative industries like Film, Music, and Fashion. We bridge the gap between talent and industry opportunities.",
-                "what is starzopp": "StarZopp is a dedicated collaboration platform for creatives. It features dynamic portfolios, real-time messaging, and AI-powered smart search to help talent and recruiters connect seamlessly.",
-                "features": "Key features include: 1. Dynamic Portfolios, 2. Real-Time Messaging, 3. AI Smart Search, 4. Job Boards, 5. Growth Analytics, and 6. Verified Professional Profiles.",
-                "mission": "Our mission is to empower creative professionals by providing a centralized digital ecosystem for jobs, collaborations, and career growth.",
-                "level up": "To level up on StarZopp, focus on strategic portfolio curation, community engagement, and getting your professional profile verified.",
-                "jobs": "To apply for jobs, use our Integrated Job & Collaboration Boards. It's a dedicated marketplace for creative gigs, full-time roles, and cooperative projects.",
-                "apply": "You can apply for creative roles directly through the StarZopp Job Boards which connect talent with recruiters in Film, Music, and Fashion.",
-                "search": "Our AI-Powered Smart Search helps you find the right collaborators or recruiters based on skills, past projects, and location.",
-                "portfolio": "Display your work using Dynamic Portfolio Showcases. You can host high-quality video, audio, and images to tell your professional story.",
-                "message": "Use our Real-Time Messaging tools for secure, instant communication and professional outreach within the creative community.",
-                "verify": "To get verified, complete all platform safety and authenticity checks in your profile settings to build trust with collaborators.",
-                "hello": "Hello! I'm stazzy, your Starzopp assistant. How can I help you today?",
-                "hi": "Hi there! How can I help you find what you're looking for on Starzopp?",
-                "hey": "Hey! Need help with your creative portfolio or finding collaborators on Starzopp?"
+            const hub = {
+                "starzopp": "StarZopp is the premier professional networking ecosystem built for creative industries like Film, Music, and Fashion.",
+                "what is starzopp": "StarZopp is a tailored collaboration platform for creatives, featuring dynamic portfolios, messaging, and AI-powered recruiting tools.",
+                "feature": "Key features: 1. Dynamic Portfolios, 2. Real-Time Messaging, 3. AI Smart Search, 4. Job Boards, 5. Growth Analytics, and 6. Verified Profiles.",
+                "mission": "Our mission is to empower creatives by providing a centralized digital ecosystem for jobs, collaborations, and career growth.",
+                "job": "Apply for creative roles via our Job & Collaboration Boards, a marketplace for gigs, full-time roles, and cooperative projects.",
+                "apply": "Apply for creative roles via our Job & Collaboration Boards, a marketplace for gigs, full-time roles, and cooperative projects.",
+                "portfolio": "Display work with Dynamic Portfolio Showcases, perfect for high-quality video, audio, and images.",
+                "search": "AI-Powered Smart Search helps find recruiters and collaborators based on specific creative skills and location.",
+                "message": "Secure Real-Time Messaging facilitates instant collaboration and professional outreach on StarZopp.",
+                "hello": "Hello! I'm stazzy, your Starzopp assistant. What can I find for you today?",
+                "hi": "Hi there! Ready to explore or grow on StarZopp? Ask me anything!"
             };
 
-
-            // Check if we can answer INSTANTLY (0s delay)
-            for (let key in instantAnswers) {
-                if (cleanPrompt.includes(key)) {
+            for (let k in hub) {
+                if (cleanPrompt.includes(k)) {
                     setTimeout(() => {
-                        addMessage(
-                            instantAnswers[key],
-                            'ai',
-                            { duration_seconds: 0.01, model: "Zero-Latency Hub" }
-                        );
+                        addMessage(hub[k], 'ai', { duration_seconds: 0.01, model: "Instant Fact Hub" });
                     }, 50);
                     return;
                 }
             }
 
-
+            // Fallback to Server-side AI
             typingIndicator.style.display = "block";
             sendBtn.disabled = true;
 
             try {
-                // Use the new STREAMING endpoint for instant visual feedback
                 const response = await fetch("/generate-stream", {
                     method: "POST",
                     headers: {
@@ -664,15 +653,13 @@
                 });
 
                 if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || "API call failed");
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || "Server error");
                 }
 
                 typingIndicator.style.display = "none";
-
-                // Create placeholders for the streaming response
-                const aiWrapper = addMessage("", 'ai', { duration_seconds: "...", model: "TinyLlama-1.1B" }, true);
-                const aiMsgDiv = aiWrapper.querySelector('.ai-message');
+                const wrapper = addMessage("", 'ai', { duration_seconds: "...", model: "StarZopp-AI" }, true);
+                const msgBox = wrapper.querySelector('.ai-message');
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -684,48 +671,31 @@
                     if (done) break;
 
                     const chunk = decoder.decode(value);
-                    fullText += chunk;
-                    aiMsgDiv.innerText = fullText;
+                    if (chunk.trim() === "") continue; // Ignore heartbeat spaces
 
-                    // Auto-scroll as text grows
+                    fullText += chunk;
+                    msgBox.innerText = fullText;
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
 
-                // Finalize metadata
+                if (!fullText) throw new Error("Empty response from AI engine");
+
+                // Finalize UI
                 const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-                aiWrapper.querySelector('.meta-text').innerHTML = `
+                wrapper.querySelector('.meta-text').innerHTML = `
                     <span class="accuracy-badge">✓ Verified Accuracy</span>
-                    <span>${duration}s | TinyLlama-1.1B</span>
+                    <span>${duration}s | StarZopp-AI</span>
                 `;
-
-                // Add Feedback UI
-                const finalMsgText = fullText.replace(/'/g, "\\'");
-                const feedbackDiv = document.createElement("div");
-                feedbackDiv.className = "feedback-container";
-                feedbackDiv.innerHTML = `
-                    <button class="feedback-btn" onclick="handleFeedback(this, 'up', '${finalMsgText}')">👍</button>
-                    <button class="feedback-btn" onclick="handleFeedback(this, 'down', '${finalMsgText}')">👎</button>
-                `;
-                aiWrapper.appendChild(feedbackDiv);
-
-                const inputContainer = document.createElement("div");
-                inputContainer.className = "feedback-input-container";
-                inputContainer.innerHTML = `
-                    <p style="font-size: 0.8rem; margin-bottom: 5px;">Help me improve! What should have been the answer?</p>
-                    <textarea class="feedback-input" placeholder="Enter the correct response..."></textarea>
-                    <button class="feedback-submit" onclick="submitImprovement(this, '${finalMsgText}')">Submit</button>
-                `;
-                aiWrapper.appendChild(inputContainer);
-
 
             } catch (err) {
                 typingIndicator.style.display = "none";
-                addMessage("Sorry, I encountered an error: " + err.message, 'ai');
+                addMessage("Our AI engine is currently optimizing. Please try asking again in a few seconds: " + err.message, 'ai');
             } finally {
                 sendBtn.disabled = false;
                 msgInput.focus();
             }
         }
+
 
 
         function addMessage(text, sender, metadata = null, returnWrapper = false) {
