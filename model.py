@@ -7,7 +7,7 @@ import glob
 
 # Configuration
 def find_local_model():
-    specific_path = os.path.join(os.getcwd(), "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
+    specific_path = os.path.join(os.getcwd(), "qwen1_5-0_5b-chat-q4_k_m.gguf")
     if os.path.exists(specific_path):
         return specific_path
     
@@ -15,7 +15,7 @@ def find_local_model():
     if gguf_files:
         return os.path.abspath(gguf_files[0])
     
-    return os.path.join(os.getcwd(), "models", "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
+    return os.path.join(os.getcwd(), "models", "qwen1_5-0_5b-chat-q4_k_m.gguf")
 
 MODEL_PATH = find_local_model()
 
@@ -34,12 +34,12 @@ class LLMManager:
             if self.model is not None:
                 return
 
-            print(f"Loading model from: {MODEL_PATH}")
+            print(f"Loading Nano-model: {MODEL_PATH}")
             if not os.path.exists(MODEL_PATH):
                 os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
                 hf_hub_download(
-                    repo_id="TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
-                    filename="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+                    repo_id="Qwen/Qwen1.5-0.5B-Chat-GGUF",
+                    filename="qwen1_5-0_5b-chat-q4_k_m.gguf",
                     local_dir=os.path.dirname(MODEL_PATH) if os.path.dirname(MODEL_PATH) else ".",
                     local_dir_use_symlinks=False
                 )
@@ -52,52 +52,36 @@ class LLMManager:
                 use_mlock=False,
                 verbose=False
             )
-
-
-
-
-
-
-
-
-
-
-            print("Model loaded successfully.")
+            print("Nano-Model Ready.")
 
     def get_context(self):
-        knowledge_path = os.path.join(os.getcwd(), "knowledge.txt")
-        if os.path.exists(knowledge_path):
-            try:
-                with open(knowledge_path, "r", encoding="utf-8") as f:
-                    return f.read().strip()
-            except:
-                pass
-        return ""
+        # ⚡ Ultra-Compress context for speed
+        return "StarZopp: Creative Networking (Film/Music/Fashion). Job Boards, Portfolios, AI Search, Messaging."
 
-    def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.5, top_p: float = 0.9):
+    def generate(self, prompt: str, max_tokens: int = 120, temperature: float = 0.3, top_p: float = 0.9):
+        clean = prompt.lower().strip().replace(".", "")
+        if clean in {"hi", "hello", "hey", "hii"}:
+            return "Hello! I am stazzy, your StarZopp Assistant. How can I help you today?"
+
         if self.model is None:
             self.load_model()
         
         context = self.get_context()
-        formatted_prompt = f"""<|system|>StarZopp Expert. Respond in one concise paragraph. Use ONLY the database provided.
-DATABASE: {context}</s>
-<|user|>{prompt}</s>
-<|assistant|>"""
+        formatted_prompt = f"<|im_start|>system\nStarZopp Expert. Database: {context}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
         
         with self._lock:
             response = self.model(
                 formatted_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                top_p=top_p,
-                stop=["</s>"],
+                stop=["<|im_end|>"],
                 echo=False
             )
         
         return response["choices"][0]["text"].strip()
 
-    def generate_stream(self, prompt: str, max_tokens: int = 256, temperature: float = 0.4, top_p: float = 0.9):
-        # ⚡ Instant Greeting Speed-Boost (0.01s)
+    def generate_stream(self, prompt: str, max_tokens: int = 128, temperature: float = 0.4, top_p: float = 0.9):
+        # 🚀 IMMEDIATE GREETING HANDOFF (0.01s)
         clean = prompt.lower().strip().replace(".", "")
         if clean in {"hi", "hello", "hey", "hii"}:
             yield "Hello! I am stazzy, your StarZopp AI. How can I assist you today?"
@@ -107,20 +91,14 @@ DATABASE: {context}</s>
             self.load_model()
 
         context = self.get_context()
-        # ⚡ Short prompt = faster "thinking" phase
-        formatted_prompt = f"<|system|>StarZopp AI. Knowledge: {context}</s><|user|>{prompt}</s><|assistant|>"
-
-
-
-
+        formatted_prompt = f"<|im_start|>system\nStarZopp Expert. Database: {context}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
 
         with self._lock:
             stream = self.model(
                 formatted_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                top_p=top_p,
-                stop=["</s>"],
+                stop=["<|im_end|>"],
                 stream=True,
                 echo=False
             )
