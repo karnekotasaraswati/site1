@@ -493,9 +493,10 @@
 
         <div id="chat-messages">
             <div class="message ai-message">
-                Hello I'm stazzy, Starzopp assistant. how can i help you find what you're looking for today ?
+                Hello! I am stazzy, your StarZopp Assistant. How can I help you today?
             </div>
         </div>
+
 
         <div id="typing-indicator" class="typing" style="margin-left: 24px;">AI is thinking...</div>
 
@@ -662,9 +663,9 @@
                 // Finalize UI
                 const duration = ((Date.now() - startTime) / 1000).toFixed(2);
                 wrapper.querySelector('.meta-text').innerHTML = `
-                    <span class="accuracy-badge">✓ Verified Accuracy</span>
-                    <span>${duration}s | StarZopp-AI</span>
+                    <span>${duration}s | StarZopp-AI Generator</span>
                 `;
+
 
             } catch (err) {
                 typingIndicator.style.display = "none";
