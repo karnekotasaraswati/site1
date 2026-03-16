@@ -35,8 +35,13 @@ class LLMManager:
                 return
 
             print(f"Loading Nano-model: {MODEL_PATH}")
+            if os.path.exists(MODEL_PATH) and os.path.getsize(MODEL_PATH) < 100_000_000:
+                print("Detected corrupted or incomplete model file. Removing and re-downloading...")
+                os.remove(MODEL_PATH)
+
             if not os.path.exists(MODEL_PATH):
                 os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+                print("Downloading model from HuggingFace... This will take a few minutes!")
                 hf_hub_download(
                     repo_id="TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
                     filename="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
