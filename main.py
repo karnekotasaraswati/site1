@@ -80,12 +80,13 @@ app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 async def custom_404_handler(request: Request, exc: HTTPException):
     # Log the attempted path to help debug "Not Found" issues
     logger.warning(f"404 Attempted: {request.url.path}")
+    base_url = f"{request.url.scheme}://{request.url.netloc}"
     return JSONResponse(
         status_code=404,
         content={
             "detail": "Path Not Found",
             "attempted_path": str(request.url.path),
-            "suggestion": "Please visit http://localhost:8000/ to access the Stazzy interface."
+            "suggestion": f"Please visit {base_url}/ to access the Stazzy assistant interface."
         }
     )
 
@@ -167,8 +168,8 @@ class FeedbackRequest(BaseModel):
 
 class GenerateRequest(BaseModel):
     prompt: str
-    max_tokens: Optional[int] = 120 # Fast default
-    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 512 # Increased for complete responses
+    temperature: Optional[float] = 0.5
     top_p: Optional[float] = 0.95
 
 
@@ -182,18 +183,26 @@ class KeyGenerationResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    # 🚀 Run all heavy setup in a thread so the link opens INSTANTLY
+    # 🚀 Run fast setup in background
     import threading
     def background_setup():
         try:
             init_db()
             refresh_key_cache()
-            llm.load_model()
-            print("Setup Complete.")
+            print("DB/Cache Setup Complete.")
         except Exception as e:
             print(f"Setup Error: {e}")
             
     threading.Thread(target=background_setup).start()
+
+    # 🛑 BLOCKING: Pre-load the model before accepting traffic to eliminate cold-starts
+    start = time.time()
+    try:
+        print("Pre-warming model... Please wait.")
+        llm.load_model()
+        print(f"Model warmed up in {round(time.time() - start, 2)}s. Ready for traffic!")
+    except Exception as e:
+        print(f"CRITICAL: Failed to load model on startup! {e}")
 
 
 
@@ -208,8 +217,8 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "version": "1.1.5",
-        "model": "TinyLlama-1.1B-Chat-v1.0"
+        "version": "1.1.6",
+        "model": "TinyLlama-1.1B"
     }
 
 
@@ -288,7 +297,7 @@ async def generate_response(
             "response": response,
             "metadata": {
                 "duration_seconds": round(duration, 2),
-                "model": "TinyLlama-1.1B-Chat-v1.0"
+                "model": "TinyLlama-1.1B"
             }
         }
     except Exception as e:

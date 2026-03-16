@@ -7,7 +7,7 @@ import glob
 
 # Configuration
 def find_local_model():
-    specific_path = os.path.join(os.getcwd(), "qwen1_5-0_5b-chat-q4_k_m.gguf")
+    specific_path = os.path.join(os.getcwd(), "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
     if os.path.exists(specific_path):
         return specific_path
     
@@ -15,7 +15,7 @@ def find_local_model():
     if gguf_files:
         return os.path.abspath(gguf_files[0])
     
-    return os.path.join(os.getcwd(), "models", "qwen1_5-0_5b-chat-q4_k_m.gguf")
+    return os.path.join(os.getcwd(), "models", "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
 
 MODEL_PATH = find_local_model()
 
@@ -38,17 +38,18 @@ class LLMManager:
             if not os.path.exists(MODEL_PATH):
                 os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
                 hf_hub_download(
-                    repo_id="Qwen/Qwen1.5-0.5B-Chat-GGUF",
-                    filename="qwen1_5-0_5b-chat-q4_k_m.gguf",
+                    repo_id="TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+                    filename="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
                     local_dir=os.path.dirname(MODEL_PATH) if os.path.dirname(MODEL_PATH) else ".",
                     local_dir_use_symlinks=False
                 )
-            
+            import multiprocessing
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=384,   # Minimal memory footprint
-                n_threads=1, # Lowest CPU strain
-                n_batch=4,   # Stable processing
+                n_ctx=1024,
+                n_threads=min(16, multiprocessing.cpu_count() or 4), # Allow higher max threads for parallelism
+                n_batch=16, # Tuned batch matching the user instructions for prompt processing speed
+                n_gpu_layers=-1, # Will offload exactly to GPU if you have one + CUDA enabled
                 use_mlock=False,
                 verbose=False
             )
@@ -58,7 +59,7 @@ class LLMManager:
         # ⚡ Ultra-Compress context for speed
         return "StarZopp: Creative Networking (Film/Music/Fashion). Job Boards, Portfolios, AI Search, Messaging."
 
-    def generate(self, prompt: str, max_tokens: int = 120, temperature: float = 0.3, top_p: float = 0.9):
+    def generate(self, prompt: str, max_tokens: int = 60, temperature: float = 0.2, top_p: float = 0.85):
         clean = prompt.lower().strip().replace(".", "")
         if clean in {"hi", "hello", "hey", "hii"}:
             return "Hello! I am stazzy, your StarZopp Assistant. How can I help you today?"
@@ -74,13 +75,14 @@ class LLMManager:
                 formatted_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                stop=["<|im_end|>"],
+                top_p=top_p,
+                stop=["<|im_end|>", "\n\nUser:"], # Aggressive heuristics stopping
                 echo=False
             )
         
         return response["choices"][0]["text"].strip()
 
-    def generate_stream(self, prompt: str, max_tokens: int = 128, temperature: float = 0.4, top_p: float = 0.9):
+    def generate_stream(self, prompt: str, max_tokens: int = 60, temperature: float = 0.2, top_p: float = 0.85):
         # 🚀 IMMEDIATE GREETING HANDOFF (0.01s)
         clean = prompt.lower().strip().replace(".", "")
         if clean in {"hi", "hello", "hey", "hii"}:
@@ -98,7 +100,8 @@ class LLMManager:
                 formatted_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                stop=["<|im_end|>"],
+                top_p=top_p,
+                stop=["<|im_end|>", "\n\nUser:"],
                 stream=True,
                 echo=False
             )
