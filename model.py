@@ -49,12 +49,14 @@ class LLMManager:
                     local_dir_use_symlinks=False
                 )
             import multiprocessing
+            # Cap threads to 2 for Render Free Tier to prevent massive context-switching overhead
+            cores = multiprocessing.cpu_count() if multiprocessing.cpu_count() else 1
             self.model = Llama(
                 model_path=MODEL_PATH,
                 n_ctx=1024,
-                n_threads=min(16, multiprocessing.cpu_count() or 4), # Allow higher max threads for parallelism
-                n_batch=16, # Tuned batch matching the user instructions for prompt processing speed
-                n_gpu_layers=-1, # Will offload exactly to GPU if you have one + CUDA enabled
+                n_threads=min(2, cores), 
+                n_batch=16, 
+                n_gpu_layers=-1, 
                 use_mlock=False,
                 verbose=False
             )
@@ -66,7 +68,7 @@ class LLMManager:
 
     def generate(self, prompt: str, max_tokens: int = 60, temperature: float = 0.2, top_p: float = 0.85):
         clean = prompt.lower().strip().replace(".", "")
-        if clean in {"hi", "hello", "hey", "hii"}:
+        if clean in {"hi", "hello", "hey", "hii", "hloo", "heloo", "helo", "hlo"}:
             return "Hello! I am stazzy, your StarZopp Assistant. How can I help you today?"
 
         if self.model is None:
@@ -90,7 +92,7 @@ class LLMManager:
     def generate_stream(self, prompt: str, max_tokens: int = 60, temperature: float = 0.2, top_p: float = 0.85):
         # 🚀 IMMEDIATE GREETING HANDOFF (0.01s)
         clean = prompt.lower().strip().replace(".", "")
-        if clean in {"hi", "hello", "hey", "hii"}:
+        if clean in {"hi", "hello", "hey", "hii", "hloo", "heloo", "helo", "hlo"}:
             yield "Hello! I am stazzy, your StarZopp AI. How can I assist you today?"
             return
 
