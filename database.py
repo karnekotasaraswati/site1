@@ -7,21 +7,32 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Supabase Configuration (Optional, for persistent storage)
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# We will read these dynamically in get_supabase, but keep globals for backward compatibility if needed
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip() or None
+SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip() or None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "app.db")
 
 def get_supabase():
     """Initializes Supabase client only if credentials and network are available."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    # Ensure we use fresh environment variables to avoid caching issues during runtime
+    url = (os.getenv("SUPABASE_URL") or "").strip() or None
+    key = (os.getenv("SUPABASE_KEY") or "").strip() or None
+    
+    print(f"DEBUG SUPABASE: URL is '{url}'")
+    print(f"DEBUG SUPABASE: KEY exists? {'Yes' if key else 'No'}")
+    
+    if not url or not key:
+        print("DEBUG SUPABASE: Missing URL or KEY, returning None.")
         return None
+        
     try:
         # Create client with a small timeout for requests
         # Note: supabase-py uses postgrest-py internally which uses httpx
-        return create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception:
+        return create_client(url, key)
+    except Exception as e:
+        print(f"DEBUG SUPABASE: Client creation error: {e}")
         return None
 
 
@@ -93,9 +104,8 @@ def save_api_key(api_key: str, secret_key: str = None, description: str = "My Ke
             supabase.table("user_api_keys").insert(
                 {"api_key": api_key, "secret_key": secret_key, "description": description}
             ).execute()
-        except Exception:
-            # Silent fail for Supabase, data is already saved locally
-            pass
+        except Exception as e:
+            print(f"Supabase user_api_keys insert error: {e}")
 
     return True, None
 
@@ -107,8 +117,7 @@ def delete_api_key(key_id: int):
         try:
             supabase.table("user_api_keys").delete().eq("id", key_id).execute()
         except Exception as e: 
-            if "[Errno -2]" not in str(e):
-                print(f"DEBUG: Supabase delete error: {e}")
+            print(f"DEBUG: Supabase delete error: {e}")
 
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -180,8 +189,8 @@ def update_key_usage(api_key: str):
         try:
             # We don't await this or block on it; fire-and-forget
             supabase.table("user_api_keys").update({"last_used": now}).eq("api_key", api_key).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Supabase update_key_usage error: {e}")
 
 
 def save_chat(prompt: str, response: str):
@@ -195,8 +204,7 @@ def save_chat(prompt: str, response: str):
                 {"prompt": prompt, "response": response}
             ).execute()
         except Exception as e:
-            if "[Errno -2]" not in str(e):
-                print("Supabase chat save error:", e)
+            print(f"Supabase chat save error: {e}")
 
     # 🔹 SQLITE FALLBACK
     try:
@@ -224,8 +232,7 @@ def save_feedback(prompt: str, response: str, feedback_type: str, comment: str =
                 {"prompt": prompt, "response": response, "feedback_type": feedback_type, "comment": comment}
             ).execute()
         except Exception as e:
-            if "[Errno -2]" not in str(e):
-                print("Supabase feedback save error:", e)
+            print(f"Supabase feedback save error: {e}")
 
     # 🔹 SQLITE FALLBACK
     try:
@@ -252,8 +259,7 @@ def verify_api_key_pair(api_key: str, secret_key: str):
             if response.data:
                 return True
         except Exception as e:
-            if "[Errno -2]" not in str(e):
-                print("Supabase verify error:", e)
+            print(f"Supabase verify error: {e}")
 
     # SQLite fallback
     try:
