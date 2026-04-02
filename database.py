@@ -107,7 +107,8 @@ def delete_api_key(key_id: int):
         try:
             supabase.table("user_api_keys").delete().eq("id", key_id).execute()
         except Exception as e: 
-            print(f"DEBUG: Supabase delete error: {e}")
+            if "[Errno -2]" not in str(e):
+                print(f"DEBUG: Supabase delete error: {e}")
 
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -194,7 +195,8 @@ def save_chat(prompt: str, response: str):
                 {"prompt": prompt, "response": response}
             ).execute()
         except Exception as e:
-            print("Supabase chat save error:", e)
+            if "[Errno -2]" not in str(e):
+                print("Supabase chat save error:", e)
 
     # 🔹 SQLITE FALLBACK
     try:
@@ -222,7 +224,8 @@ def save_feedback(prompt: str, response: str, feedback_type: str, comment: str =
                 {"prompt": prompt, "response": response, "feedback_type": feedback_type, "comment": comment}
             ).execute()
         except Exception as e:
-            print("Supabase feedback save error:", e)
+            if "[Errno -2]" not in str(e):
+                print("Supabase feedback save error:", e)
 
     # 🔹 SQLITE FALLBACK
     try:
@@ -249,7 +252,8 @@ def verify_api_key_pair(api_key: str, secret_key: str):
             if response.data:
                 return True
         except Exception as e:
-            print("Supabase verify error:", e)
+            if "[Errno -2]" not in str(e):
+                print("Supabase verify error:", e)
 
     # SQLite fallback
     try:
