@@ -348,7 +348,7 @@ async def generate_api_key(
     raise HTTPException(status_code=500, detail=error_msg)
 
 @app.post("/generate")
-@limiter.limit("10/minute")
+@limiter.limit("10000/minute")
 async def generate_response(
     request: Request,
     generate_request: GenerateRequest,
@@ -392,7 +392,7 @@ async def generate_response(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate-stream")
-@limiter.limit("10/minute")
+@limiter.limit("10000/minute")
 async def generate_stream(
     request: Request,
     generate_request: GenerateRequest,
