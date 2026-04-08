@@ -633,43 +633,53 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || "Server error");
+                    let errorDetail = "Server error";
+                    try { const d = await response.json(); errorDetail = d.detail || errorDetail; } catch(e) {}
+                    throw new Error(`[${response.status}] ${errorDetail}`);
                 }
 
                 typingIndicator.style.display = "none";
                 const wrapper = addMessage("", 'ai', { duration_seconds: "...", model: "StarZopp-AI" }, true);
                 const msgBox = wrapper.querySelector('.ai-message');
+                msgBox.innerHTML = '<em style="color:var(--text-muted)">Generating...</em>';
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let fullText = "";
                 let startTime = Date.now();
+                let isFirstChunk = true;
 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    const chunk = decoder.decode(value);
-                    if (chunk.trim() === "") continue; // Ignore heartbeat spaces
+                    const chunk = decoder.decode(value, { stream: true });
+
+                    // Skip the initial wakeup heartbeat (single space sent by server)
+                    if (isFirstChunk && chunk === " ") {
+                        isFirstChunk = false;
+                        continue;
+                    }
+                    isFirstChunk = false;
 
                     fullText += chunk;
                     msgBox.innerText = fullText;
                     chatMessages.scrollTop = chatMessages.scrollHeight;
                 }
 
-                if (!fullText) throw new Error("Empty response from AI engine");
-
-                // Finalize UI
-                const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-                wrapper.querySelector('.meta-text').innerHTML = `
-                    <span>${duration}s | StarZopp-AI Generator</span>
-                `;
-
+                // Graceful fallback if model returned nothing
+                if (!fullText.trim()) {
+                    msgBox.innerText = "I'm still warming up! Please ask me again in a moment.";
+                } else {
+                    // Finalize UI with timing metadata
+                    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                    wrapper.querySelector('.meta-text').innerHTML = `<span>${duration}s | StarZopp-AI</span>`;
+                }
 
             } catch (err) {
                 typingIndicator.style.display = "none";
-                addMessage("Our AI engine is currently optimizing. Please try asking again in a few seconds: " + err.message, 'ai');
+                addMessage("⚠️ " + err.message + " — Please try again.", 'ai');
+                console.error("Stream error:", err);
             } finally {
                 sendBtn.disabled = false;
                 msgInput.focus();

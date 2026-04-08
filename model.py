@@ -102,6 +102,7 @@ class LLMManager:
         context = self.get_context()
         formatted_prompt = f"<|im_start|>system\nStarZopp Expert. Database: {context}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
 
+        # Acquire lock only to START the stream, not hold it for the full generation
         with self._lock:
             stream = self.model(
                 formatted_prompt,
@@ -112,11 +113,16 @@ class LLMManager:
                 stream=True,
                 echo=False
             )
-            
+            # Collect all tokens while holding the lock (llama_cpp stream is not thread-safe)
+            tokens = []
             for output in stream:
                 token = output["choices"][0]["text"]
                 if token:
-                    yield token
+                    tokens.append(token)
+
+        # Yield tokens AFTER releasing the lock so other threads can proceed
+        for token in tokens:
+            yield token
 
 
 

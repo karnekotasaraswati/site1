@@ -24,6 +24,76 @@ from security import get_api_key, validate_master_secret, create_new_key, refres
 from model import llm
 from database import init_db, save_api_key, save_chat, save_feedback
 
+import queue
+import threading
+import asyncio
+
+# --- Concurrency and Queue System ---
+# Global queue for LLM tasks
+llm_task_queue = queue.Queue()
+# Semaphore to limit concurrent processing (Initialized in startup_event)
+llm_semaphore = None
+
+def llm_worker_thread():
+    """Background worker that processes LLM requests from the queue."""
+    logger.info("LLM Worker Thread started.")
+    while True:
+        try:
+            task = llm_task_queue.get()
+            if task is None:
+                break
+            
+            prompt = task['prompt']
+            max_tokens = task['max_tokens']
+            temperature = task['temperature']
+            top_p = task['top_p']
+            event = task['event']
+            result_container = task['result_container']
+            
+            try:
+                # Actual model inference call
+                response = llm.generate(
+                    prompt, 
+                    max_tokens, 
+                    temperature=temperature, 
+                    top_p=top_p
+                )
+                result_container['response'] = response
+            except Exception as e:
+                logger.error(f"Error in LLM worker: {e}")
+                result_container['error'] = e
+            finally:
+                event.set() # Signal that processing is complete
+                llm_task_queue.task_done()
+        except Exception as e:
+            logger.error(f"LLM Worker Loop Error: {e}")
+
+def llm_queue_gateway(prompt, max_tokens, temperature, top_p):
+    """
+    Interface for the endpoint to interact with the worker queue.
+    This runs in a thread (via run_in_threadpool) and waits for the worker.
+    """
+    event = threading.Event()
+    result_container = {'response': None, 'error': None}
+    
+    # Push work to the background queue
+    llm_task_queue.put({
+        'prompt': prompt,
+        'max_tokens': max_tokens,
+        'temperature': temperature,
+        'top_p': top_p,
+        'event': event,
+        'result_container': result_container
+    })
+    
+    # Wait for the worker thread to finish processing
+    event.wait()
+    
+    if result_container['error']:
+        raise result_container['error']
+    
+    return result_container['response']
+
 # Create a limiter that identifies users by their IP or API Key
 limiter = Limiter(key_func=get_remote_address)
 
@@ -183,6 +253,16 @@ class KeyGenerationResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
+    # Initialize the semaphore to limit concurrent LLM requests to 30
+    global llm_semaphore
+    llm_semaphore = asyncio.Semaphore(30)
+    
+    # Create background worker threads (plural) as requested
+    # These will continuously pull tasks from the queue
+    for i in range(30): # Matching the semaphore limit to allow 30 concurrent processes
+        worker = threading.Thread(target=llm_worker_thread, daemon=True, name=f"LLMWorker-{i}")
+        worker.start()
+
     # 🚀 Run fast setup in background
     import threading
     def background_setup():
@@ -278,14 +358,20 @@ async def generate_response(
 ):
     try:
         start_time = time.time()
-        # 🚀 Move model execution to a separate thread to keep the main event loop responsive
-        response = await run_in_threadpool(
-            llm.generate,
-            generate_request.prompt, 
-            generate_request.max_tokens,
-            temperature=generate_request.temperature,
-            top_p=generate_request.top_p
-        )
+        
+        # 🛡️ Concurrency Control: Limit to 30 requests at a time
+        # Applying semaphore inside the endpoint as requested
+        async with llm_semaphore:
+            # 🚀 Queue System Implementation: Instead of direct call, push to queue and wait
+            # We maintain run_in_threadpool usage to keep the gateway call non-blocking for the event loop
+            response = await run_in_threadpool(
+                llm_queue_gateway,
+                generate_request.prompt, 
+                generate_request.max_tokens,
+                temperature=generate_request.temperature,
+                top_p=generate_request.top_p
+            )
+            
         duration = time.time() - start_time
         
         # Save to database in background
@@ -297,10 +383,12 @@ async def generate_response(
             "response": response,
             "metadata": {
                 "duration_seconds": round(duration, 2),
-                "model": "TinyLlama-1.1B"
+                "model": "TinyLlama-1.1B",
+                "status": "processed_via_queue"
             }
         }
     except Exception as e:
+        logger.error(f"Error in /generate endpoint: {e}")
         log_request(request, 500, api_key)
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -320,12 +408,39 @@ async def generate_stream(
             # 🚀 PROXY-WAKEUP: Send a tiny byte immediately to force the proxy connection open
             yield " " 
             
-            for chunk in llm.generate_stream(
-                generate_request.prompt, 
-                generate_request.max_tokens,
-                temperature=generate_request.temperature,
-                top_p=generate_request.top_p
-            ):
+            import asyncio
+            import threading
+            
+            queue = asyncio.Queue()
+            
+            def producer():
+                try:
+                    for chunk in llm.generate_stream(
+                        generate_request.prompt, 
+                        generate_request.max_tokens,
+                        temperature=generate_request.temperature,
+                        top_p=generate_request.top_p
+                    ):
+                        # Queue needs an event loop context.
+                        # Since we are in a worker thread, we must schedule the put safely on the main loop.
+                        loop.call_soon_threadsafe(queue.put_nowait, chunk)
+                except Exception as e:
+                    loop.call_soon_threadsafe(queue.put_nowait, e)
+                finally:
+                    loop.call_soon_threadsafe(queue.put_nowait, None)
+
+            loop = asyncio.get_running_loop()
+            thread = threading.Thread(target=producer)
+            thread.start()
+            
+            while True:
+                chunk = await queue.get()
+                if chunk is None:
+                    break
+                if isinstance(chunk, Exception):
+                    # For safety, let's just break, or raise
+                    break
+                
                 full_response.append(chunk)
                 yield chunk
             
