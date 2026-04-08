@@ -263,16 +263,13 @@ async def startup_event():
         worker = threading.Thread(target=llm_worker_thread, daemon=True, name=f"LLMWorker-{i}")
         worker.start()
 
-    # 🚀 Run fast setup in background
-    def background_setup():
-        try:
-            init_db()
-            refresh_key_cache()
-            print("DB/Cache Setup Complete.")
-        except Exception as e:
-            print(f"Setup Error: {e}")
-            
-    threading.Thread(target=background_setup).start()
+    # 🚀 BLOCKING Setup: Ensure DB and API Keys are loaded before accepting traffic
+    try:
+        init_db()
+        refresh_key_cache()
+        print("DB/Cache Setup Complete.")
+    except Exception as e:
+        print(f"CRITICAL Setup Error: {e}")
 
     # 🛑 BLOCKING: Pre-load the model before accepting traffic to eliminate cold-starts
     start = time.time()
@@ -346,6 +343,15 @@ async def generate_api_key(
 
     log_request(request, 500, "MASTER-GEN-FAIL")
     raise HTTPException(status_code=500, detail=error_msg)
+
+@app.get("/generate")
+async def generate_info():
+    return {
+        "detail": "This is a POST-only AI generation endpoint.",
+        "usage": "Send a POST request with 'X-API-Key' and 'X-API-Secret' headers.",
+        "content_type": "application/json",
+        "body_example": {"prompt": "Hello", "max_tokens": 100}
+    }
 
 @app.post("/generate")
 @limiter.limit("10000/minute")
