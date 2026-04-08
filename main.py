@@ -264,7 +264,6 @@ async def startup_event():
         worker.start()
 
     # 🚀 Run fast setup in background
-    import threading
     def background_setup():
         try:
             init_db()
