@@ -29,10 +29,8 @@ import threading
 import asyncio
 
 # --- Concurrency and Queue System ---
-# Global queue for LLM tasks
-llm_task_queue = queue.Queue()
-# Semaphore to limit concurrent processing (Initialized in startup_event)
-llm_semaphore = None
+# Global queue for LLM tasks with a max size to prevent memory bloat
+llm_task_queue = queue.Queue(maxsize=100)
 
 def llm_worker_thread():
     """Background worker that processes LLM requests from the queue."""
@@ -76,18 +74,30 @@ def llm_queue_gateway(prompt, max_tokens, temperature, top_p):
     event = threading.Event()
     result_container = {'response': None, 'error': None}
     
-    # Push work to the background queue
-    llm_task_queue.put({
-        'prompt': prompt,
-        'max_tokens': max_tokens,
-        'temperature': temperature,
-        'top_p': top_p,
-        'event': event,
-        'result_container': result_container
-    })
+    # 🚀 BLOCKING FIX: Push work to the background queue with a 5s timeout
+    try:
+        llm_task_queue.put({
+            'prompt': prompt,
+            'max_tokens': max_tokens,
+            'temperature': temperature,
+            'top_p': top_p,
+            'event': event,
+            'result_container': result_container
+        }, timeout=5)
+    except queue.Full:
+        logger.error("LLM Task Queue is full.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
+            detail="System is currently overloaded. Please try again later."
+        )
     
-    # Wait for the worker thread to finish processing
-    event.wait()
+    # 🚀 BLOCKING FIX: Wait for the worker thread with a 10s timeout
+    if not event.wait(timeout=10):
+        logger.warning(f"Worker timeout for prompt: {prompt[:50]}...")
+        raise HTTPException(
+            status_code=status.HTTP_504_TIMEOUT, 
+            detail="AI model processing timed out (10s limit exceeded)."
+        )
     
     if result_container['error']:
         raise result_container['error']
@@ -253,10 +263,6 @@ class KeyGenerationResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    # Initialize the semaphore to limit concurrent LLM requests to 30
-    global llm_semaphore
-    llm_semaphore = asyncio.Semaphore(30)
-    
     # Create background worker threads (plural) as requested
     # These will continuously pull tasks from the queue
     for i in range(30): # Matching the semaphore limit to allow 30 concurrent processes
@@ -293,8 +299,8 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "version": "1.1.6",
-        "model": "TinyLlama-1.1B"
+        "version": "1.1.7",
+        "model": "Qwen1.5-0.5B-Chat"
     }
 
 
@@ -354,7 +360,7 @@ async def generate_info():
     }
 
 @app.post("/generate")
-@limiter.limit("10000/minute")
+@limiter.limit("100/minute") # 🚀 BALANCED RATE: 100/min for high traffic stability
 async def generate_response(
     request: Request,
     generate_request: GenerateRequest,
@@ -364,18 +370,15 @@ async def generate_response(
     try:
         start_time = time.time()
         
-        # 🛡️ Concurrency Control: Limit to 30 requests at a time
-        # Applying semaphore inside the endpoint as requested
-        async with llm_semaphore:
-            # 🚀 Queue System Implementation: Instead of direct call, push to queue and wait
-            # We maintain run_in_threadpool usage to keep the gateway call non-blocking for the event loop
-            response = await run_in_threadpool(
-                llm_queue_gateway,
-                generate_request.prompt, 
-                generate_request.max_tokens,
-                temperature=generate_request.temperature,
-                top_p=generate_request.top_p
-            )
+        # 🚀 Queue System Implementation: Instead of direct call, push to queue and wait
+        # We maintain run_in_threadpool usage to keep the gateway call non-blocking for the event loop
+        response = await run_in_threadpool(
+            llm_queue_gateway,
+            generate_request.prompt, 
+            generate_request.max_tokens,
+            temperature=generate_request.temperature,
+            top_p=generate_request.top_p
+        )
             
         duration = time.time() - start_time
         
@@ -388,7 +391,7 @@ async def generate_response(
             "response": response,
             "metadata": {
                 "duration_seconds": round(duration, 2),
-                "model": "TinyLlama-1.1B",
+                "model": "Qwen1.5-0.5B-Chat",
                 "status": "processed_via_queue"
             }
         }
@@ -398,7 +401,7 @@ async def generate_response(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/generate-stream")
-@limiter.limit("10000/minute")
+@limiter.limit("100/minute") # 🚀 BALANCED RATE: 100/min for high traffic stability
 async def generate_stream(
     request: Request,
     generate_request: GenerateRequest,
@@ -413,9 +416,6 @@ async def generate_stream(
             # 🚀 PROXY-WAKEUP: Send a tiny byte immediately to force the proxy connection open
             yield " " 
             
-            import asyncio
-            import threading
-            
             queue = asyncio.Queue()
             
             def producer():
@@ -426,16 +426,15 @@ async def generate_stream(
                         temperature=generate_request.temperature,
                         top_p=generate_request.top_p
                     ):
-                        # Queue needs an event loop context.
-                        # Since we are in a worker thread, we must schedule the put safely on the main loop.
                         loop.call_soon_threadsafe(queue.put_nowait, chunk)
                 except Exception as e:
+                    logger.error(f"Stream producer error: {e}")
                     loop.call_soon_threadsafe(queue.put_nowait, e)
                 finally:
                     loop.call_soon_threadsafe(queue.put_nowait, None)
 
             loop = asyncio.get_running_loop()
-            thread = threading.Thread(target=producer)
+            thread = threading.Thread(target=producer, daemon=True) # Ensure daemon
             thread.start()
             
             while True:
@@ -443,7 +442,7 @@ async def generate_stream(
                 if chunk is None:
                     break
                 if isinstance(chunk, Exception):
-                    # For safety, let's just break, or raise
+                    yield f" [Error: {str(chunk)}] "
                     break
                 
                 full_response.append(chunk)

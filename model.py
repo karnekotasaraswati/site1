@@ -7,7 +7,7 @@ import glob
 
 # Configuration
 def find_local_model():
-    specific_path = os.path.join(os.getcwd(), "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
+    specific_path = os.path.join(os.getcwd(), "qwen1_5-0_5b-chat-q4_k_m.gguf")
     if os.path.exists(specific_path):
         return specific_path
     
@@ -15,7 +15,7 @@ def find_local_model():
     if gguf_files:
         return os.path.abspath(gguf_files[0])
     
-    return os.path.join(os.getcwd(), "models", "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf")
+    return os.path.join(os.getcwd(), "models", "qwen1_5-0_5b-chat-q4_k_m.gguf")
 
 MODEL_PATH = find_local_model()
 
@@ -41,10 +41,10 @@ class LLMManager:
 
             if not os.path.exists(MODEL_PATH):
                 os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-                print("Downloading model from HuggingFace... This will take a few minutes!")
+                print(f"Downloading Qwen model from HuggingFace... Path: {MODEL_PATH}")
                 hf_hub_download(
-                    repo_id="TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
-                    filename="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+                    repo_id="Qwen/Qwen1.5-0.5B-Chat-GGUF",
+                    filename="qwen1_5-0_5b-chat-q4_k_m.gguf",
                     local_dir=os.path.dirname(MODEL_PATH) if os.path.dirname(MODEL_PATH) else ".",
                     local_dir_use_symlinks=False
                 )
@@ -60,7 +60,7 @@ class LLMManager:
                 use_mlock=False,
                 verbose=False
             )
-            print("Nano-Model Ready.")
+            print(f"Qwen-0.5B Model Ready. Loaded from {MODEL_PATH}")
 
     def get_context(self):
         # ⚡ Ultra-Compress context for speed
