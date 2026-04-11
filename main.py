@@ -54,7 +54,8 @@ def llm_worker_thread():
                     prompt, 
                     max_tokens, 
                     temperature=temperature, 
-                    top_p=top_p
+                    top_p=top_p,
+                    system_prompt=task.get('system_prompt')
                 )
                 result_container['response'] = response
             except Exception as e:
@@ -66,7 +67,7 @@ def llm_worker_thread():
         except Exception as e:
             logger.error(f"LLM Worker Loop Error: {e}")
 
-def llm_queue_gateway(prompt, max_tokens, temperature, top_p):
+def llm_queue_gateway(prompt, max_tokens, temperature, top_p, system_prompt=None):
     """
     Interface for the endpoint to interact with the worker queue.
     This runs in a thread (via run_in_threadpool) and waits for the worker.
@@ -81,6 +82,7 @@ def llm_queue_gateway(prompt, max_tokens, temperature, top_p):
             'max_tokens': max_tokens,
             'temperature': temperature,
             'top_p': top_p,
+            'system_prompt': system_prompt,
             'event': event,
             'result_container': result_container
         }, timeout=5)
@@ -241,17 +243,17 @@ async def favicon():
 # --- Pydantic Models for Input Validation ---
 
 class FeedbackRequest(BaseModel):
-    prompt: str
-    response: str
-    feedback_type: str
-    comment: Optional[str] = ""
+    session_id: str
+    question: str
+    answer: str
+    feedback: str  # e.g., 'up' or 'down'
 
-class GenerateRequest(BaseModel):
-    prompt: str
+class ChatRequest(BaseModel):
+    session_id: Optional[str] = "default"
+    question: str
     max_tokens: Optional[int] = 512 # Increased for complete responses
     temperature: Optional[float] = 0.5
     top_p: Optional[float] = 0.95
-
 
 class KeyGenerationResponse(BaseModel):
     api_key: str
@@ -273,6 +275,9 @@ async def startup_event():
     try:
         init_db()
         refresh_key_cache()
+        # Initialize RAG embeddings from knowledge base
+        from database import init_knowledge_base
+        init_knowledge_base()
         print("DB/Cache Setup Complete.")
     except Exception as e:
         print(f"CRITICAL Setup Error: {e}")
@@ -350,42 +355,50 @@ async def generate_api_key(
     log_request(request, 500, "MASTER-GEN-FAIL")
     raise HTTPException(status_code=500, detail=error_msg)
 
-@app.get("/generate")
-async def generate_info():
+@app.get("/chat")
+async def chat_info():
     return {
-        "detail": "This is a POST-only AI generation endpoint.",
+        "detail": "This is a POST-only AI chat endpoint.",
         "usage": "Send a POST request with 'X-API-Key' and 'X-API-Secret' headers.",
         "content_type": "application/json",
-        "body_example": {"prompt": "Hello", "max_tokens": 100}
+        "body_example": {"session_id": "uuid", "question": "Hello", "max_tokens": 100}
     }
 
-@app.post("/generate")
-@limiter.limit("100/minute") # 🚀 BALANCED RATE: 100/min for high traffic stability
-async def generate_response(
+@app.post("/chat")
+@limiter.limit("100/minute") 
+async def chat_response(
     request: Request,
-    generate_request: GenerateRequest,
-    background_tasks: BackgroundTasks,
-    api_key: str = Depends(get_api_key)
+    chat_request: ChatRequest,
+    background_tasks: BackgroundTasks
 ):
     try:
+        from database import retrieve_knowledge
+        
         start_time = time.time()
         
-        # 🚀 Queue System Implementation: Instead of direct call, push to queue and wait
-        # We maintain run_in_threadpool usage to keep the gateway call non-blocking for the event loop
+        # RAG Step
+        context = retrieve_knowledge(chat_request.question)
+        
+        # We pass context embedded in prompt or we can let llm_queue_gateway pass it
+        # Actually model.py generate needs modifying to accept context
+        # We will embed context directly into the prompt for the model
+        SystemPrompt = "You are a helpful mentor. Answer in simple English. Explain step by step. Only use the provided website content. If unsure, say you don't know.\n\nWebsite Content:\n" + context
+        
         response = await run_in_threadpool(
             llm_queue_gateway,
-            generate_request.prompt, 
-            generate_request.max_tokens,
-            temperature=generate_request.temperature,
-            top_p=generate_request.top_p
+            chat_request.question, 
+            chat_request.max_tokens,
+            temperature=chat_request.temperature,
+            top_p=chat_request.top_p,
+            system_prompt=SystemPrompt
         )
             
         duration = time.time() - start_time
         
         # Save to database in background
-        background_tasks.add_task(save_chat, generate_request.prompt, response)
+        background_tasks.add_task(save_chat, chat_request.session_id, chat_request.question, response)
         
-        log_request(request, 200, api_key)
+        # log_request(request, 200, "anonymous_chat")
         
         return {
             "response": response,
@@ -396,92 +409,26 @@ async def generate_response(
             }
         }
     except Exception as e:
-        logger.error(f"Error in /generate endpoint: {e}")
-        log_request(request, 500, api_key)
+        logger.error(f"Error in /chat endpoint: {e}")
+        # log_request(request, 500, "anonymous_chat")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/generate-stream")
-@limiter.limit("100/minute") # 🚀 BALANCED RATE: 100/min for high traffic stability
-async def generate_stream(
-    request: Request,
-    generate_request: GenerateRequest,
-    background_tasks: BackgroundTasks,
-    api_key: str = Depends(get_api_key)
-):
-    try:
-        log_request(request, 200, api_key)
-        
-        async def stream_generator():
-            full_response = []
-            # 🚀 PROXY-WAKEUP: Send a tiny byte immediately to force the proxy connection open
-            yield " " 
-            
-            queue = asyncio.Queue()
-            
-            def producer():
-                try:
-                    for chunk in llm.generate_stream(
-                        generate_request.prompt, 
-                        generate_request.max_tokens,
-                        temperature=generate_request.temperature,
-                        top_p=generate_request.top_p
-                    ):
-                        loop.call_soon_threadsafe(queue.put_nowait, chunk)
-                except Exception as e:
-                    logger.error(f"Stream producer error: {e}")
-                    loop.call_soon_threadsafe(queue.put_nowait, e)
-                finally:
-                    loop.call_soon_threadsafe(queue.put_nowait, None)
-
-            loop = asyncio.get_running_loop()
-            thread = threading.Thread(target=producer, daemon=True) # Ensure daemon
-            thread.start()
-            
-            while True:
-                chunk = await queue.get()
-                if chunk is None:
-                    break
-                if isinstance(chunk, Exception):
-                    yield f" [Error: {str(chunk)}] "
-                    break
-                
-                full_response.append(chunk)
-                yield chunk
-            
-            # Save to database once finished (in background)
-            background_tasks.add_task(save_chat, generate_request.prompt, "".join(full_response))
-
-
-        return StreamingResponse(
-            stream_generator(), 
-            media_type="text/plain",
-            headers={
-                "X-Accel-Buffering": "no",
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-            }
-        )
-
-    except Exception as e:
-        log_request(request, 500, api_key)
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/feedback")
 @limiter.limit("20/minute")
 async def collect_feedback(
     request: Request,
     feedback: FeedbackRequest,
-    background_tasks: BackgroundTasks,
-    api_key: str = Depends(get_api_key)
+    background_tasks: BackgroundTasks
 ):
     background_tasks.add_task(
         save_feedback, 
-        feedback.prompt, 
-        feedback.response, 
-        feedback.feedback_type, 
-        feedback.comment
+        feedback.session_id,
+        feedback.question, 
+        feedback.answer, 
+        feedback.feedback
     )
-    log_request(request, 200, api_key)
+    # log_request(request, 200, "anonymous_chat")
     return {"status": "success", "message": "Feedback stored"}
 
 if __name__ == "__main__":

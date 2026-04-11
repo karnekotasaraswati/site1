@@ -6,8 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Supabase Configuration (Optional, for persistent storage)
-# We will read these dynamically in get_supabase, but keep globals for backward compatibility if needed
+# Supabase Configuration
 SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip() or None
 SUPABASE_KEY = (os.getenv("SUPABASE_KEY") or "").strip() or None
 
@@ -16,25 +15,17 @@ DB_PATH = os.path.join(BASE_DIR, "app.db")
 
 def get_supabase():
     """Initializes Supabase client only if credentials and network are available."""
-    # Ensure we use fresh environment variables to avoid caching issues during runtime
     url = (os.getenv("SUPABASE_URL") or "").strip() or None
     key = (os.getenv("SUPABASE_KEY") or "").strip() or None
     
-    print(f"DEBUG SUPABASE: URL is '{url}'")
-    print(f"DEBUG SUPABASE: KEY exists? {'Yes' if key else 'No'}")
-    
     if not url or not key:
-        print("DEBUG SUPABASE: Missing URL or KEY, returning None.")
         return None
         
     try:
-        # Create client with a small timeout for requests
-        # Note: supabase-py uses postgrest-py internally which uses httpx
         return create_client(url, key)
     except Exception as e:
         print(f"DEBUG SUPABASE: Client creation error: {e}")
         return None
-
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -52,39 +43,33 @@ def init_db():
         )
     """)
 
-    # Table for Chat History (NEW)
+    # Table for Chat History
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            prompt TEXT NOT NULL,
-            response TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            question TEXT NOT NULL,
+            answer TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    conn.commit()
-    conn.close()
-
-    # Create feedback table if missing
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    # Table for Feedback based on requirements
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS feedback (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            prompt TEXT,
-            response TEXT,
-            feedback_type TEXT,
-            comment TEXT,
+            id TEXT,
+            session_id TEXT,
+            question TEXT,
+            answer TEXT,
+            feedback TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
     conn.commit()
     conn.close()
 
-
 def save_api_key(api_key: str, secret_key: str = None, description: str = "My Key"):
-    """Saves the API key to both Local SQLite (primary) and Supabase (sync)."""
-    # 🔹 Always save to local SQLite first (instant and reliable)
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -97,7 +82,6 @@ def save_api_key(api_key: str, secret_key: str = None, description: str = "My Ke
     except Exception as e:
         return False, str(e)
 
-    # 🔹 Then try to sync with Supabase in a fire-and-forget manner
     supabase = get_supabase()
     if supabase:
         try:
@@ -109,35 +93,26 @@ def save_api_key(api_key: str, secret_key: str = None, description: str = "My Ke
 
     return True, None
 
-
 def delete_api_key(key_id: int):
-    print(f"DEBUG: Attempting to delete key with ID: {key_id}")
     supabase = get_supabase()
     if supabase:
         try:
             supabase.table("user_api_keys").delete().eq("id", key_id).execute()
         except Exception as e: 
-            print(f"DEBUG: Supabase delete error: {e}")
+            pass
 
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("DELETE FROM user_api_keys WHERE id = ?", (int(key_id),))
-        rows_affected = conn.total_changes
         conn.commit()
         conn.close()
-        print(f"DEBUG: SQLite delete success. Rows affected: {rows_affected}")
         return True
     except Exception as e:
-        print(f"DEBUG: SQLite delete error: {e}")
         return False
 
-
 def get_all_keys_info():
-    """Returns metadata for all keys, combining Local SQLite and any reachable Supabase data."""
     results = []
-    
-    # 🔹 Primary: Fetch from Local SQLite (Always works, instant)
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -148,7 +123,6 @@ def get_all_keys_info():
         for row in rows:
             key = row['api_key']
             secret = row['secret_key'] or ""
-            
             results.append({
                 "id": row['id'],
                 "api_key": key,
@@ -159,60 +133,47 @@ def get_all_keys_info():
             })
         conn.close()
     except Exception as e:
-        print(f"DEBUG: SQLite fetch error: {e}")
-
-    # Note: We don't merge with Supabase here to avoid dashboard lag.
-    # Supabase is used primarily for persistent backups and sync between deploys.
+        pass
     return results
 
-
 def update_key_usage(api_key: str):
-    """Updates the last_used timestamp. Prioritizes local SQLite for performance."""
     now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-    
-    # 🔹 Update Local SQLite (Instant)
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE user_api_keys SET last_used = ? WHERE api_key = ?", 
-            (now, api_key)
-        )
+        cursor.execute("UPDATE user_api_keys SET last_used = ? WHERE api_key = ?", (now, api_key))
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"DEBUG: SQLite usage update error: {e}")
+        pass
 
-    # 🔹 Sync with Supabase (Optional network call)
     supabase = get_supabase()
     if supabase:
         try:
-            # We don't await this or block on it; fire-and-forget
             supabase.table("user_api_keys").update({"last_used": now}).eq("api_key", api_key).execute()
-        except Exception as e:
-            print(f"Supabase update_key_usage error: {e}")
+        except Exception:
+            pass
 
-
-def save_chat(prompt: str, response: str):
-    """Saves a conversation to Supabase and SQLite fallback."""
+def save_chat(session_id: str, question: str, answer: str):
+    # Saves a conversation to Supabase and SQLite fallback.
     supabase = get_supabase()
 
-    # 🔹 SUPABASE
+    # SUPABASE
     if supabase:
         try:
             supabase.table("chat_history").insert(
-                {"prompt": prompt, "response": response}
+                {"session_id": session_id, "question": question, "answer": answer}
             ).execute()
         except Exception as e:
             print(f"Supabase chat save error: {e}")
 
-    # 🔹 SQLITE FALLBACK
+    # SQLITE FALLBACK
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO chat_history (prompt, response) VALUES (?, ?)",
-            (prompt, response)
+            "INSERT INTO chat_history (session_id, question, answer) VALUES (?, ?, ?)",
+            (session_id, question, answer)
         )
         conn.commit()
         conn.close()
@@ -221,26 +182,28 @@ def save_chat(prompt: str, response: str):
         return False, str(e)
 
 
-def save_feedback(prompt: str, response: str, feedback_type: str, comment: str = ""):
-    """Saves user feedback to Supabase and SQLite fallback."""
+def save_feedback(session_id: str, question: str, answer: str, feedback: str):
+    # Saves user feedback to Supabase and SQLite fallback.
+    import uuid
+    feedback_id = str(uuid.uuid4())
     supabase = get_supabase()
 
-    # 🔹 SUPABASE
+    # SUPABASE
     if supabase:
         try:
             supabase.table("feedback").insert(
-                {"prompt": prompt, "response": response, "feedback_type": feedback_type, "comment": comment}
+                {"id": feedback_id, "session_id": session_id, "question": question, "answer": answer, "feedback": feedback}
             ).execute()
         except Exception as e:
             print(f"Supabase feedback save error: {e}")
 
-    # 🔹 SQLITE FALLBACK
+    # SQLITE FALLBACK
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO feedback (prompt, response, feedback_type, comment) VALUES (?, ?, ?, ?)",
-            (prompt, response, feedback_type, comment)
+            "INSERT INTO feedback (id, session_id, question, answer, feedback) VALUES (?, ?, ?, ?, ?)",
+            (feedback_id, session_id, question, answer, feedback)
         )
         conn.commit()
         conn.close()
@@ -250,42 +213,31 @@ def save_feedback(prompt: str, response: str, feedback_type: str, comment: str =
 
 
 def verify_api_key_pair(api_key: str, secret_key: str):
-    """Verifies that the provided API key and Secret key pair exist and match."""
     supabase = get_supabase()
-
     if supabase:
         try:
             response = supabase.table("user_api_keys").select("*").eq("api_key", api_key).eq("secret_key", secret_key).execute()
             if response.data:
                 return True
         except Exception as e:
-            print(f"Supabase verify error: {e}")
+            pass
 
-    # SQLite fallback
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-
         cursor.execute("SELECT 1 FROM user_api_keys WHERE api_key = ? AND secret_key = ?", (api_key, secret_key))
         result = cursor.fetchone()
         conn.close()
-
         return result is not None
-
     except:
         return False
 
-
 def load_all_key_pairs():
-    """Returns a dictionary mapping API keys to their Secret keys for memory caching."""
     key_pairs = {}
-    
-    # 🔹 Load from Env
     valid_env_keys = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
     for k in valid_env_keys:
         key_pairs[k] = None
 
-    # 🔹 Load from Supabase
     try:
         supabase = get_supabase()
         if supabase:
@@ -296,7 +248,6 @@ def load_all_key_pairs():
     except:
         pass
 
-    # 🔹 Load from SQLite
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -308,3 +259,49 @@ def load_all_key_pairs():
         pass
         
     return key_pairs
+
+# --- RAG Implementation ---
+knowledge_texts = []
+knowledge_embeddings = None
+embedder = None
+
+def init_knowledge_base():
+    global knowledge_texts, knowledge_embeddings, embedder
+    try:
+        from sentence_transformers import SentenceTransformer
+        embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    except ImportError:
+        print("sentence-transformers not installed. RAG will just return raw text.")
+        return
+
+    text_file = os.path.join(BASE_DIR, "knowledge.txt")
+    if os.path.exists(text_file):
+        with open(text_file, "r", encoding="utf-8") as f:
+            content = f.read()
+            # Split into chunks (simple double newline split)
+            knowledge_texts = [chunk.strip() for chunk in content.split("\\n") if chunk.strip()]
+            
+        if knowledge_texts:
+            print("Encoding knowledge base...")
+            knowledge_embeddings = embedder.encode(knowledge_texts, convert_to_tensor=True)
+            print("Knowledge base encoded.")
+
+def retrieve_knowledge(query: str, top_k: int = 3):
+    global knowledge_texts, knowledge_embeddings, embedder
+    if not knowledge_texts:
+        # Fallback raw text if embedder fails
+        text_file = os.path.join(BASE_DIR, "knowledge.txt")
+        if os.path.exists(text_file):
+            with open(text_file, "r", encoding="utf-8") as f:
+                return f.read()
+        return "StarZopp: Creative Networking."
+        
+    if embedder is None or knowledge_embeddings is None:
+        return " ".join(knowledge_texts)
+
+    from sentence_transformers import util
+    query_embedding = embedder.encode(query, convert_to_tensor=True)
+    hits = util.semantic_search(query_embedding, knowledge_embeddings, top_k=top_k)[0]
+    
+    results = [knowledge_texts[hit['corpus_id']] for hit in hits]
+    return " ".join(results)

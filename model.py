@@ -66,7 +66,7 @@ class LLMManager:
         # ⚡ Ultra-Compress context for speed
         return "StarZopp: Creative Networking (Film/Music/Fashion). Job Boards, Portfolios, AI Search, Messaging."
 
-    def generate(self, prompt: str, max_tokens: int = 60, temperature: float = 0.2, top_p: float = 0.85):
+    def generate(self, prompt: str, max_tokens: int = 60, temperature: float = 0.2, top_p: float = 0.85, system_prompt: str = None):
         clean = prompt.lower().strip().replace(".", "")
         if clean in {"hi", "hello", "hey", "hii", "hloo", "heloo", "helo", "hlo"}:
             return "Hello! I am stazzy, your StarZopp Assistant. How can I help you today?"
@@ -74,8 +74,8 @@ class LLMManager:
         if self.model is None:
             self.load_model()
         
-        context = self.get_context()
-        formatted_prompt = f"<|im_start|>system\nStarZopp Expert. Database: {context}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
+        sys_str = system_prompt if system_prompt else f"StarZopp Expert. Database: {self.get_context()}"
+        formatted_prompt = f"<|im_start|>system\n{sys_str}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
         
         with self._lock:
             response = self.model(
