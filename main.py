@@ -252,8 +252,8 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = "default"
     question: str
     max_tokens: Optional[int] = 512 # Increased for complete responses
-    temperature: Optional[float] = 0.5
-    top_p: Optional[float] = 0.95
+    temperature: Optional[float] = 0.01 # Pushed almost to 0 for 100% deterministic factual accuracy
+    top_p: Optional[float] = 0.1 # Very strict sampling
 
 class KeyGenerationResponse(BaseModel):
     api_key: str
@@ -383,7 +383,13 @@ async def chat_response(
         # We pass context embedded in prompt or we can let llm_queue_gateway pass it
         # Actually model.py generate needs modifying to accept context
         # We will embed context directly into the prompt for the model
-        SystemPrompt = "You are a helpful mentor. Answer in simple English. Explain step by step. Only use the provided website content. If unsure, say you don't know.\n\nWebsite Content:\n" + context
+        SystemPrompt = (
+            "You are a strict, helpful mentor. Answer in simple English. Explain step by step. "
+            "CRITICAL INSTRUCTION: You MUST answer 100% accurately and ONLY use the provided 'Website Content' below. "
+            "Do NOT include any external knowledge, assumptions, or hallucinations. "
+            "If the answer is not explicitly contained in the Website Content, you MUST reply exactly with: 'I don't know based on the provided content.'\n\n"
+            f"Website Content:\n{context}"
+        )
         
         response = await run_in_threadpool(
             llm_queue_gateway,
