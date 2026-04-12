@@ -753,32 +753,11 @@
             buttons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            const wrapper = container.parentElement;
-            const inputContainer = wrapper.querySelector('.feedback-input-container');
-
-            if (type === 'down') {
-                inputContainer.style.display = "flex";
-            } else {
-                inputContainer.style.display = "none";
-                sendFeedbackToServer('positive', responseText, "");
-            }
+            // Instantly send feedback to server for both up and down
+            sendFeedbackToServer(type, responseText);
         }
 
-        async function submitImprovement(btn, responseText) {
-            const container = btn.parentElement;
-            const comment = container.querySelector('.feedback-input').value;
-
-            if (!comment) return alert("Please provide the correct answer so I can learn!");
-
-            await sendFeedbackToServer('negative', responseText, comment);
-
-            container.innerHTML = "<p style='color: #10b981; font-size: 0.8rem;'>Thank you! I will use this to improve my answers.</p>";
-            setTimeout(() => {
-                container.style.display = "none";
-            }, 3000);
-        }
-
-        async function sendFeedbackToServer(type, responseText, comment) {
+        async function sendFeedbackToServer(type, responseText) {
             let promptText = "Unknown prompt";
             const wrappers = document.querySelectorAll('.message-wrapper');
             // Logic to find the prompt associated with this AI response
