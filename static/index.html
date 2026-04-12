@@ -629,9 +629,23 @@
             return id;
         })();
 
-        // Skip Lock Screen for Pre-Login Mode
+        // Restore Auth Lock Screen logic
         window.addEventListener('load', async () => {
-            document.getElementById('lock-screen').style.display = "none";
+            if (currentApiKey && currentApiSecret) {
+                // Background verification
+                try {
+                    const res = await fetch("/verify-token", {
+                        headers: { "X-API-Key": currentApiKey, "X-API-Secret": currentApiSecret }
+                    });
+                    if (res.ok) {
+                        document.getElementById('lock-screen').style.display = "none";
+                    } else {
+                        // Clear invalid keys
+                        localStorage.removeItem('activeChatKey');
+                        localStorage.removeItem('activeChatSecret');
+                    }
+                } catch (e) { }
+            }
             apiStatus.innerHTML = `<span style="color: #10b981;">Session: ${sessionId.substring(0,8)}...</span>`;
         });
 
@@ -658,7 +672,9 @@
                 const response = await fetch("/chat", {
                     method: "POST",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        "X-API-Key": currentApiKey,
+                        "X-API-Secret": currentApiSecret || ""
                     },
                     body: JSON.stringify({ session_id: sessionId, question: prompt })
                 });
@@ -781,7 +797,9 @@
                 await fetch("/feedback", {
                     method: "POST",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        "X-API-Key": currentApiKey,
+                        "X-API-Secret": currentApiSecret || ""
                     },
                     body: JSON.stringify({
                         session_id: sessionId,

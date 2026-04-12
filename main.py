@@ -369,7 +369,8 @@ async def chat_info():
 async def chat_response(
     request: Request,
     chat_request: ChatRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    api_key: str = Depends(get_api_key)
 ):
     try:
         from database import retrieve_knowledge
@@ -398,7 +399,7 @@ async def chat_response(
         # Save to database in background
         background_tasks.add_task(save_chat, chat_request.session_id, chat_request.question, response)
         
-        # log_request(request, 200, "anonymous_chat")
+        log_request(request, 200, api_key)
         
         return {
             "response": response,
@@ -410,7 +411,7 @@ async def chat_response(
         }
     except Exception as e:
         logger.error(f"Error in /chat endpoint: {e}")
-        # log_request(request, 500, "anonymous_chat")
+        log_request(request, 500, api_key)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -419,7 +420,8 @@ async def chat_response(
 async def collect_feedback(
     request: Request,
     feedback: FeedbackRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    api_key: str = Depends(get_api_key)
 ):
     background_tasks.add_task(
         save_feedback, 
@@ -428,7 +430,7 @@ async def collect_feedback(
         feedback.answer, 
         feedback.feedback
     )
-    # log_request(request, 200, "anonymous_chat")
+    log_request(request, 200, api_key)
     return {"status": "success", "message": "Feedback stored"}
 
 if __name__ == "__main__":
