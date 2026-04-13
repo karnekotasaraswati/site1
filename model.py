@@ -30,8 +30,10 @@ class LLMManager:
         return cls._instance
 
     def load_model(self):
+        """Initializes the Llama model into memory. Guaranteed to run only once."""
         with self._lock:
             if self.model is not None:
+                print("DIAGNOSTIC: Model already loaded. Skipping initialization.")
                 return
 
             print(f"Loading Nano-model: {MODEL_PATH}")
@@ -48,26 +50,24 @@ class LLMManager:
                     local_dir=os.path.dirname(MODEL_PATH) if os.path.dirname(MODEL_PATH) else ".",
                     local_dir_use_symlinks=False
                 )
-            # Auto-detect best thread count. On Render, usually 1-4 cores. 
-            # We want at least 4 threads if possible for acceptable speed on 0.5B models.
+
             import multiprocessing
             cpu_count = multiprocessing.cpu_count()
             threads = max(4, cpu_count) if cpu_count else 4
             
-            print(f"Initializing Llama with {threads} threads and CPU-only mode.")
+            print(f"Initializing Llama with {threads} threads. This happens ONLY ONCE.")
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=2048, # Increased context for RAG
+                n_ctx=2048,
                 n_threads=threads, 
-                n_batch=512, # Standard batch size for faster prompt processing
-                n_gpu_layers=0, # Explicitly disable GPU to avoid OpenCL overhead in CPU-only containers
+                n_batch=512,
+                n_gpu_layers=0,
                 use_mlock=False,
                 verbose=False
             )
-            print(f"Qwen-0.5B Model Ready. Loaded from {MODEL_PATH}")
+            print(f"✅ Qwen-0.5B Model Ready and Loaded into memory.")
 
     def get_context(self):
-        # ⚡ Ultra-Compress context for speed
         return "StarZopp: Creative Networking (Film/Music/Fashion). Job Boards, Portfolios, AI Search, Messaging."
 
     def generate(self, prompt: str, max_tokens: int = 60, temperature: float = 0.2, top_p: float = 0.85, system_prompt: str = None):
@@ -76,6 +76,7 @@ class LLMManager:
             return "Hello! I am stazzy, your StarZopp Assistant. How can I help you today?"
 
         if self.model is None:
+            print("CRITICAL ERROR: AI model was not pre-warmed. Initializing now (expect delay)...")
             self.load_model()
         
         sys_str = system_prompt if system_prompt else f"StarZopp Expert. Database: {self.get_context()}"
@@ -87,26 +88,25 @@ class LLMManager:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
-                stop=["<|im_end|>", "\n\nUser:"], # Aggressive heuristics stopping
+                stop=["<|im_end|>", "\n\nUser:"],
                 echo=False
             )
         
         return response["choices"][0]["text"].strip()
 
     def generate_stream(self, prompt: str, max_tokens: int = 60, temperature: float = 0.2, top_p: float = 0.85):
-        # 🚀 IMMEDIATE GREETING HANDOFF (0.01s)
         clean = prompt.lower().strip().replace(".", "")
         if clean in {"hi", "hello", "hey", "hii", "hloo", "heloo", "helo", "hlo"}:
             yield "Hello! I am stazzy, your StarZopp AI. How can I assist you today?"
             return
 
         if self.model is None:
+            print("CRITICAL ERROR: AI model was not pre-warmed for streaming. Initializing now...")
             self.load_model()
 
         context = self.get_context()
         formatted_prompt = f"<|im_start|>system\nStarZopp Expert. Database: {context}<|im_end|>\n<|im_start|>user\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
 
-        # Acquire lock only to START the stream, not hold it for the full generation
         with self._lock:
             stream = self.model(
                 formatted_prompt,
@@ -117,14 +117,12 @@ class LLMManager:
                 stream=True,
                 echo=False
             )
-            # Collect all tokens while holding the lock (llama_cpp stream is not thread-safe)
             tokens = []
             for output in stream:
                 token = output["choices"][0]["text"]
                 if token:
                     tokens.append(token)
 
-        # Yield tokens AFTER releasing the lock so other threads can proceed
         for token in tokens:
             yield token
 
