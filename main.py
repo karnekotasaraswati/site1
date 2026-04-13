@@ -93,12 +93,12 @@ def llm_queue_gateway(prompt, max_tokens, temperature, top_p, system_prompt=None
             detail="System is currently overloaded. Please try again later."
         )
     
-    # 🚀 BLOCKING FIX: Wait for the worker thread with a 10s timeout
-    if not event.wait(timeout=10):
+    # 🚀 BLOCKING FIX: Wait for the worker thread with a 120s timeout
+    if not event.wait(timeout=120):
         logger.warning(f"Worker timeout for prompt: {prompt[:50]}...")
         raise HTTPException(
-            status_code=status.HTTP_504_TIMEOUT, 
-            detail="AI model processing timed out (10s limit exceeded)."
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT, 
+            detail="AI model processing timed out (120s limit exceeded)."
         )
     
     if result_container['error']:
