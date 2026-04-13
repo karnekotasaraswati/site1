@@ -14,9 +14,13 @@ listen = ['chatbot_tasks']
 def start_worker():
     """
     Starts the Redis Queue (RQ) Worker.
-    This process will listen for new jobs in 'chatbot_tasks' queue and
-    execute the corresponding processing functions.
+    This process pre-loads the AI model once before listening for jobs.
     """
+    # 🚀 Pre-load model once at worker startup
+    from model import llm
+    logger.info("Pre-warming AI model in worker process...")
+    llm.load_model()
+    
     logger.info(f"Starting Redis Worker listening on: {listen}...")
     
     try:

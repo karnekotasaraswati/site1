@@ -1,6 +1,5 @@
-import time
-import random
 import logging
+from model import llm
 
 # Set up logging for task progress tracking
 logging.basicConfig(level=logging.INFO)
@@ -8,28 +7,30 @@ logger = logging.getLogger(__name__)
 
 def process_chatbot_request(user_input: str):
     """
-    Simulate AI model processing with a delay of 2–5 seconds.
-    This function will be called by the Redis Worker (RQ).
+    Process chat request using the real LLM model.
+    This function is called by the Redis Worker (RQ).
+    The model is loaded once per worker process.
     """
-    logger.info(f"Processing chat request: {user_input}")
+    logger.info(f"Processing real AI chat request: {user_input}")
     
-    # Simulate processing delay (2–5 seconds)
-    processing_time = random.uniform(2, 5)
-    time.sleep(processing_time)
-    
-    # Simulate simple AI logic for a chatbot response
-    responses = [
-        f"Simulated response to '{user_input}': Hi! How can I help you today?",
-        f"Simulated response to '{user_input}': That's an interesting question. Let me think...",
-        f"Simulated response to '{user_input}': Based on my simulated knowledge, here's the answer.",
-        f"Simulated response to '{user_input}': I processed your input in {processing_time:.2f} seconds."
-    ]
-    
-    response_content = random.choice(responses)
-    logger.info(f"Finished processing. Result: {response_content}")
-    
-    return {
-        "response": response_content,
-        "processing_time": round(processing_time, 2),
-        "status": "success"
-    }
+    try:
+        # The llm.generate method handles model loading internally if not pre-warmed
+        # but we also ensure it's pre-warmed in the worker startup.
+        response_text = llm.generate(
+            user_input, 
+            max_tokens=512, 
+            temperature=0.7, 
+            top_p=0.9
+        )
+        
+        return {
+            "response": response_text,
+            "status": "success",
+            "model": "Qwen1.5-0.5B-Chat"
+        }
+    except Exception as e:
+        logger.error(f"Error processing AI request: {e}")
+        return {
+            "error": str(e),
+            "status": "failed"
+        }

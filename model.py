@@ -31,9 +31,14 @@ class LLMManager:
 
     def load_model(self):
         """Initializes the Llama model into memory. Guaranteed to run only once."""
+        # Double-check locking to optimize and ensure it's loaded only once
+        if self.model is not None:
+            return
+
         with self._lock:
+            # Re-check after acquiring lock
             if self.model is not None:
-                print("DIAGNOSTIC: Model already loaded. Skipping initialization.")
+                print("DIAGNOSTIC: Model already loaded by another thread. Skipping.")
                 return
 
             print(f"Loading Nano-model: {MODEL_PATH}")
@@ -58,7 +63,7 @@ class LLMManager:
             print(f"Initializing Llama with {threads} threads. This happens ONLY ONCE.")
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=2048,
+                n_ctx=4096,
                 n_threads=threads, 
                 n_batch=512,
                 n_gpu_layers=0,
