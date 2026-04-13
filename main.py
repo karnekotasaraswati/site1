@@ -50,6 +50,7 @@ def llm_worker_thread():
             
             try:
                 # Actual model inference call
+                start_exec = time.time()
                 response = llm.generate(
                     prompt, 
                     max_tokens, 
@@ -57,6 +58,8 @@ def llm_worker_thread():
                     top_p=top_p,
                     system_prompt=task.get('system_prompt')
                 )
+                exec_time = time.time() - start_exec
+                logger.info(f"LLM Generated response in {exec_time:.2f}s")
                 result_container['response'] = response
             except Exception as e:
                 logger.error(f"Error in LLM worker: {e}")
@@ -267,7 +270,10 @@ class KeyGenerationResponse(BaseModel):
 async def startup_event():
     # Create background worker threads (plural) as requested
     # These will continuously pull tasks from the queue
-    for i in range(30): # Matching the semaphore limit to allow 30 concurrent processes
+    # 🚀 OPTIMIZATION: Reduce to 2 worker threads. 
+    # Multiple threads are serialized by the LLM lock anyway; 
+    # fewer threads reduces context switching and memory overhead.
+    for i in range(2): 
         worker = threading.Thread(target=llm_worker_thread, daemon=True, name=f"LLMWorker-{i}")
         worker.start()
 

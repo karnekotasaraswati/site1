@@ -48,15 +48,19 @@ class LLMManager:
                     local_dir=os.path.dirname(MODEL_PATH) if os.path.dirname(MODEL_PATH) else ".",
                     local_dir_use_symlinks=False
                 )
+            # Auto-detect best thread count. On Render, usually 1-4 cores. 
+            # We want at least 4 threads if possible for acceptable speed on 0.5B models.
             import multiprocessing
-            # Cap threads to 2 for Render Free Tier to prevent massive context-switching overhead
-            cores = multiprocessing.cpu_count() if multiprocessing.cpu_count() else 1
+            cpu_count = multiprocessing.cpu_count()
+            threads = max(4, cpu_count) if cpu_count else 4
+            
+            print(f"Initializing Llama with {threads} threads and CPU-only mode.")
             self.model = Llama(
                 model_path=MODEL_PATH,
-                n_ctx=1024,
-                n_threads=min(2, cores), 
-                n_batch=16, 
-                n_gpu_layers=-1, 
+                n_ctx=2048, # Increased context for RAG
+                n_threads=threads, 
+                n_batch=512, # Standard batch size for faster prompt processing
+                n_gpu_layers=0, # Explicitly disable GPU to avoid OpenCL overhead in CPU-only containers
                 use_mlock=False,
                 verbose=False
             )

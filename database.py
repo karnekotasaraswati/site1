@@ -14,17 +14,28 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "app.db")
 
 def get_supabase():
-    """Initializes Supabase client only if credentials and network are available."""
-    url = (os.getenv("SUPABASE_URL") or "").strip() or None
-    key = (os.getenv("SUPABASE_KEY") or "").strip() or None
+    """Initializes Supabase client with URL validation and error reporting."""
+    url = (os.getenv("SUPABASE_URL") or "").strip()
+    key = (os.getenv("SUPABASE_KEY") or "").strip()
     
     if not url or not key:
         return None
         
+    # Basic URL Validation
+    if not url.startswith("https://"):
+        print(f"CRITICAL SUPABASE: Invalid URL scheme (missing https://). URL starts with: '{url[:10]}...'")
+        return None
+    
+    if ".supabase.co" not in url:
+        print(f"CRITICAL SUPABASE: URL does not look like a Supabase domain. URL: '{url}'")
+        return None
+
     try:
         return create_client(url, key)
     except Exception as e:
-        print(f"DEBUG SUPABASE: Client creation error: {e}")
+        # Masking the URL for security but showing enough to identify the issue
+        masked_url = f"{url[:15]}...{url[-12:]}" if len(url) > 30 else url
+        print(f"DEBUG SUPABASE: Client initialization failed for {masked_url}. Error: {e}")
         return None
 
 def init_db():
@@ -68,6 +79,22 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+    # Diagnostic check for Supabase
+    supabase = get_supabase()
+    if supabase:
+        try:
+            # Simple health check to verify the URL resolves and the key is valid
+            print(f"DIAGNOSTIC: Verifying Supabase connection...")
+            supabase.table("user_api_keys").select("count", count="exact").limit(1).execute()
+            print("DIAGNOSTIC: Supabase connection successful.")
+        except Exception as e:
+            if "Name or service not known" in str(e) or "gaierror" in str(e):
+                 print(f"DIAGNOSTIC: Supabase Connection FAILED. [Errno -2] Name or service not known. Please check if SUPABASE_URL is correct.")
+            else:
+                print(f"DIAGNOSTIC: Supabase initialization warning: {e}")
+    else:
+        print("DIAGNOSTIC: Supabase credentials missing or invalid URL format. Falling back to local SQLite.")
 
 def save_api_key(api_key: str, secret_key: str = None, description: str = "My Key"):
     try:
@@ -165,7 +192,10 @@ def save_chat(session_id: str, question: str, answer: str):
                 {"session_id": session_id, "question": question, "answer": answer}
             ).execute()
         except Exception as e:
-            print(f"Supabase chat save error: {e}")
+            if "Name or service not known" in str(e) or "gaierror" in str(e):
+                print(f"Supabase Connection Error: The hostname in SUPABASE_URL could not be resolved. Please check your Render Environment Variables for typos in SUPABASE_URL.")
+            else:
+                print(f"Supabase chat save error: {e}")
 
     # SQLITE FALLBACK
     try:
@@ -195,7 +225,10 @@ def save_feedback(session_id: str, question: str, answer: str, feedback: str):
                 {"id": feedback_id, "session_id": session_id, "question": question, "answer": answer, "feedback": feedback}
             ).execute()
         except Exception as e:
-            print(f"Supabase feedback save error: {e}")
+            if "Name or service not known" in str(e) or "gaierror" in str(e):
+                print(f"Supabase Connection Error: The hostname in SUPABASE_URL could not be resolved.")
+            else:
+                print(f"Supabase feedback save error: {e}")
 
     # SQLITE FALLBACK
     try:
