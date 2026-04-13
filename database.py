@@ -279,7 +279,7 @@ def init_knowledge_base():
         with open(text_file, "r", encoding="utf-8") as f:
             content = f.read()
             # Split into chunks (simple double newline split)
-            knowledge_texts = [chunk.strip() for chunk in content.split("\\n") if chunk.strip()]
+            knowledge_texts = [chunk.strip() for chunk in content.split("\n") if chunk.strip()]
             
         if knowledge_texts:
             print("Encoding knowledge base...")
