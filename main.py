@@ -401,6 +401,12 @@ async def chat_response(
         )
             
         duration = time.time() - start_time
+
+        # Force strict 100% adherence: Override known LLM refusal/hallucination templates
+        lower_resp = response.lower()
+        refusal_flags = ["i'm sorry", "don't have access", "as an ai", "cannot provide", "vary greatly depending", "i am an ai"]
+        if any(flag in lower_resp for flag in refusal_flags):
+            response = "I don't know based on the provided website content."
         
         # Save to database in background
         background_tasks.add_task(save_chat, chat_request.session_id, chat_request.question, response)

@@ -261,47 +261,14 @@ def load_all_key_pairs():
     return key_pairs
 
 # --- RAG Implementation ---
-knowledge_texts = []
-knowledge_embeddings = None
-embedder = None
-
 def init_knowledge_base():
-    global knowledge_texts, knowledge_embeddings, embedder
-    try:
-        from sentence_transformers import SentenceTransformer
-        embedder = SentenceTransformer("all-MiniLM-L6-v2")
-    except ImportError:
-        print("sentence-transformers not installed. RAG will just return raw text.")
-        return
+    # Since the knowledge base is microscopic (10 lines), we do not need heavy vector embeddings
+    # like sentence-transformers, which cause Render deployments to fail/timeout.
+    pass
 
+def retrieve_knowledge(query: str, top_k: int = 3):
     text_file = os.path.join(BASE_DIR, "knowledge.txt")
     if os.path.exists(text_file):
         with open(text_file, "r", encoding="utf-8") as f:
-            content = f.read()
-            # Split into chunks (simple double newline split)
-            knowledge_texts = [chunk.strip() for chunk in content.split("\n") if chunk.strip()]
-            
-        if knowledge_texts:
-            print("Encoding knowledge base...")
-            knowledge_embeddings = embedder.encode(knowledge_texts, convert_to_tensor=True)
-            print("Knowledge base encoded.")
-
-def retrieve_knowledge(query: str, top_k: int = 3):
-    global knowledge_texts, knowledge_embeddings, embedder
-    if not knowledge_texts:
-        # Fallback raw text if embedder fails
-        text_file = os.path.join(BASE_DIR, "knowledge.txt")
-        if os.path.exists(text_file):
-            with open(text_file, "r", encoding="utf-8") as f:
-                return f.read()
-        return "StarZopp: Creative Networking."
-        
-    if embedder is None or knowledge_embeddings is None:
-        return " ".join(knowledge_texts)
-
-    from sentence_transformers import util
-    query_embedding = embedder.encode(query, convert_to_tensor=True)
-    hits = util.semantic_search(query_embedding, knowledge_embeddings, top_k=top_k)[0]
-    
-    results = [knowledge_texts[hit['corpus_id']] for hit in hits]
-    return " ".join(results)
+            return f.read().strip()
+    return "StarZopp: Creative Networking."
